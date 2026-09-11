@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0
+
+- Send and remove reactions through dedicated actions.
+- Receive authorized reaction events with original-message references, emoji and removal status.
+- Send expiring alerts with reminders and acknowledgment matching; listeners are installed before sending and cleaned up on cancellation/unload.
+- Add a binary-sensor alert blueprint that stops on acknowledgment, sensor resolution or expiry.
+- Select incoming permissions from named contacts/groups; retain manual identifiers.
+- Optionally send one deliberate setup test without persisting or automatically retrying that choice.
+- Add filtered-event and pending-alert diagnostic counts.
+- Keep message event schema version 1 and existing configuration entries compatible.
+
+Live Signal/add-on acceptance and HACS installation remain pending; automated tests use synthetic fixtures and loopback servers.
+
 ## 0.1.0
 
 First local release candidate; live Signal acceptance testing is still required.

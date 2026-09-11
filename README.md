@@ -23,8 +23,8 @@ For local testing before publication, copy `custom_components/signal_messenger_r
 1. Enter the backend URL. Path prefixes are supported. Optional username/password fields are for an HTTP Basic-auth reverse proxy, not a Signal account password. TLS certificate verification defaults to on.
 2. Choose a linked account.
 3. Select contacts/groups or type recipient numbers, UUIDs, usernames, or REST `group.` IDs manually. At least one notification destination is required. You can rename the resulting entities in Home Assistant.
-4. Enable receiving if needed, and enter allowed sender numbers or UUIDs. An empty list allows **no incoming message events**. Group messages require both an allowed sender and an allowed group ID.
-5. Send a deliberate test using a notification entity or the rich send action.
+4. Enable receiving if needed, and select allowed contacts/groups by name or enter sender numbers/UUIDs manually. An empty list allows **no incoming message events**. Group messages require both an allowed sender and an allowed group ID.
+5. Optionally select a test destination before submitting. This sends one fixed test message to that destination only. The default sends nothing. A failed or uncertain test leaves settings unsaved and resets the test selection; saving again does not automatically resend.
 
 Use integration **Configure** to change destinations, receiving permissions and polling intervals. Use **Reconfigure** to change the URL or proxy credentials while retaining the same Signal account. A proxy authentication failure starts a credential recovery flow. Changing options reloads the integration.
 
@@ -98,7 +98,7 @@ Authorized text/attachment messages emit `signal_messenger_rest_message_received
 | `text` | Message body, or an empty string for an attachment-only message |
 | `attachments`, `quote` | Limited attachment metadata and optional quote |
 
-The event entity exposes only an event type and timestamp, without message bodies or sender IDs in its attributes. Use the event bus payload for content-aware automations. Sync echoes, typing notifications, receipts, reactions, and other non-message envelopes do not trigger command automations in this release. Incoming attachment files are not fetched by HA. Backend JSON-RPC attachment download policy remains controlled by the backend.
+The event entity exposes only an event type and timestamp, without message bodies or sender IDs in its attributes. Use the event bus payload for content-aware automations. Sync echoes, typing notifications, receipts, and other unsupported envelopes do not trigger command automations. Reactions emit a separate event and never masquerade as text messages. Incoming attachment files are not fetched by HA. Backend JSON-RPC attachment download policy remains controlled by the backend.
 
 An included [reply blueprint](blueprints/automation/signal_messenger_rest/reply.yaml) matches an exact authorized command and responds in the same conversation. HACS does not automatically install blueprints. Copy it into your HA configuration's `blueprints/automation/signal_messenger_rest/` directory, or import its GitHub URL after publication.
 
@@ -125,15 +125,63 @@ max: 10
 
 Only senders authorized in integration options reach this automation. Display names are never used for authorization. Incoming text is not evaluated as a template or arbitrary service name. If your automation controls a sensitive device, add the conditions appropriate for that action.
 
+## Reactions and alert acknowledgment
+
+Send a reaction to a specific message:
+
+```yaml
+action: signal_messenger_rest.send_reaction
+data:
+  recipient: "+12025550101"
+  target_author: "+12025550101"
+  timestamp: 1789123456789
+  emoji: "✅"
+```
+
+Use `signal_messenger_rest.remove_reaction` with the same reference to remove your reaction; `emoji` is optional for removal. Select `config_entry_id` when multiple accounts are loaded. `target_author` identifies the original message author, and `timestamp` is the original message timestamp, not the reaction time. Backend errors surface as action failures; uncertain requests are not retried.
+
+Incoming `signal_messenger_rest_reaction_received` events retain the account, sender, conversation, receive time and reaction timestamp fields described above. They add:
+
+| Field | Meaning |
+| --- | --- |
+| `emoji` | Exact reaction emoji |
+| `target_timestamp` | Timestamp of the original message being reacted to |
+| `target_author` | Original author UUID, or number when UUID is absent |
+| `target_author_uuid`, `target_author_number` | Original author identifiers, when available |
+| `removed` | `true` when the reaction was removed |
+
+These events contain no message text. Both messages and reactions use the same incoming permissions. The content-free event entity now reports either `message_received` or `reaction_received`. Distinct emoji changes and removals are not suppressed as duplicates.
+
+The [acknowledgment blueprint](blueprints/automation/signal_messenger_rest/acknowledge_alert.yaml) sends an alert when a selected binary sensor turns on. Reminders quote the original alert. An approved person's matching reaction to the **original message** stops reminders. The sensor turning off also stops the action. A configurable expiry bounds the wait. Like the reply blueprint, copy/import it separately from the integration.
+
+The underlying action can also be used directly:
+
+```yaml
+action: signal_messenger_rest.send_alert
+data:
+  recipient: "+12025550101"
+  message: "The garage door is open. React to this message with ✅ to acknowledge."
+  emoji: "✅"
+  expiry: 600
+  reminder_interval: 120
+response_variable: alert_result
+```
+
+It returns `acknowledged`, `reason` (`acknowledged` or `expired`), and the original `timestamp`. Receiving must be enabled. Destination numbers, UUIDs and REST group IDs are supported; usernames are not supported for acknowledgment correlation. The reacting sender must be permitted; a group destination must also be allowed.
+
+If reactions identify your sending account only by UUID, set `account_author` to that account's UUID. It is **not** the reacting person's UUID. Matching requires the account, conversation, original message author and timestamp, exact emoji, and a non-removal event. An unrelated reaction or removal cannot acknowledge an alert.
+
+The listener is installed before the initial send so fast reactions can be matched after the message reference arrives. Reminders never replace the original reference. Set `reminder_interval` greater than `expiry` to disable reminders. Failed/uncertain sends stop the action. At most 16 alerts may wait per account. Reload, shutdown or automation cancellation clears pending waits and listeners; acknowledgments are not persisted across restarts. Expiry stops scheduling reminders but cannot retract an already in-flight send.
+
 ## Diagnostics and limitations
 
-The integration exposes API reachability, receiver connectivity, last successful send, and last authorized message time. API reachability measures the REST connection; it does not establish Signal network health. In polling mode, receiver connectivity reflects the most recent receive attempt. Quiet conversations do not imply an outage.
+The integration exposes API reachability, receiver connectivity, last successful send, and last authorized activity time. API reachability measures the REST connection; it does not establish Signal network health. In polling mode, receiver connectivity reflects the most recent receive attempt. Quiet conversations do not imply an outage.
 
 Duplicate suppression uses a bounded, in-memory cache. Restart/reload clears it, and live WebSocket messages may be lost while disconnected. There is no durable inbox, replay guarantee, unread count, or exactly-once command processing. Avoid using this transport as the sole path for critical alerts.
 
 Signal messages are decrypted in the backend and then passed to HA. Diagnostic downloads omit account identifiers, connection URLs, credentials and message contents, but automation traces and event listeners can retain received content. The API endpoint is privileged: use a private network or a protected proxy. Removing the integration never unlinks or deletes the Signal account.
 
-Reactions, receipt actions, message editing/deletion, group administration, polls, and embedded QR onboarding are outside version 0.1.0.
+Receipt actions, message editing/deletion, group administration, polls, and embedded QR onboarding remain outside version 0.2.0.
 
 ## Migration from the built-in integration
 
@@ -160,5 +208,18 @@ After verifying sending, remove the old YAML notifier. Before enabling receiving
 | HACS installation / GitHub validation | Prepared; requires a public GitHub mirror |
 
 Before a public release, validate these cases on a linked test account: direct/group/self sending; a local and URL attachment; a quoted reply to direct/group messages; two identical incoming texts; a sender without a phone number; unauthorized sender/group filtering; backend restart; HA restart/reload; a backend mode change; account unlinking; send timeout and partial failure. Check add-on and standalone deployments independently. Never send real messages from automated CI.
+
+### Receiving troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| API unreachable | URL as seen from HA, add-on/container status, port, TLS and proxy credentials |
+| API reachable, receiver disconnected | Backend mode and WebSocket proxy support; reconfigure credentials if requested |
+| Connected but no events | Incoming sender/group selections and the `filtered_events` diagnostic count; group events require both permissions |
+| Some polling messages missing | Disable competing receive sensors, helper receivers and backend automatic receive schedules |
+| Text arrives but reaction does not acknowledge | React to the original alert, check exact emoji/author/conversation, and supply `account_author` if the account number is hidden |
+| Reminders stop after restart/reload | Expected: pending alerts are in memory and canceled on reload |
+
+The diagnostic `pending_alerts` count reports current waits without message contents or identities. Reaction fixtures were derived from the [signal-cli v0.14.5 JSON contract](https://github.com/AsamK/signal-cli/blob/v0.14.5/src/main/java/org/asamk/signal/json/JsonReaction.java) and are synthetic. Live validation should include phone-number-hidden accounts, direct/group reaction addition and removal, and acknowledgments arriving before a send response. No live backend is configured in this repository.
 
 See [development instructions](CONTRIBUTING.md) and [release notes](CHANGELOG.md).
