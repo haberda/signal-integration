@@ -103,11 +103,12 @@
     },
     "event": {
       "message": {
-        "name": "Incoming message",
+        "name": "Incoming activity",
         "state_attributes": {
           "event_type": {
             "state": {
-              "message_received": "Message received"
+              "message_received": "Message received",
+              "reaction_received": "Reaction received"
             }
           }
         }
@@ -158,6 +159,58 @@
         "quote_message": {
           "name": "Quoted text",
           "description": "Optional original message text."
+        }
+      }
+    },
+    "send_reaction": {
+      "name": "Send reaction",
+      "description": "React to a specific message, or remove your reaction. No automatic retries.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Select the sending account."
+        },
+        "recipient": {
+          "name": "Conversation",
+          "description": "Recipient number/UUID or REST group. ID."
+        },
+        "target_author": {
+          "name": "Original author",
+          "description": "Sender number or UUID of the original message."
+        },
+        "timestamp": {
+          "name": "Original timestamp",
+          "description": "Original message timestamp in milliseconds."
+        },
+        "emoji": {
+          "name": "Emoji",
+          "description": "Reaction emoji; optional when removing a reaction."
+        }
+      }
+    },
+    "remove_reaction": {
+      "name": "Remove reaction",
+      "description": "React to a specific message, or remove your reaction. No automatic retries.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Select the sending account."
+        },
+        "recipient": {
+          "name": "Conversation",
+          "description": "Recipient number/UUID or REST group. ID."
+        },
+        "target_author": {
+          "name": "Original author",
+          "description": "Sender number or UUID of the original message."
+        },
+        "timestamp": {
+          "name": "Original timestamp",
+          "description": "Original message timestamp in milliseconds."
+        },
+        "emoji": {
+          "name": "Emoji",
+          "description": "Reaction emoji; optional when removing a reaction."
         }
       }
     }

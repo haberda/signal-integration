@@ -15,7 +15,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class SignalMessageEvent(SignalEntity, EventEntity):
     _attr_translation_key = "message"
-    _attr_event_types = ["message_received"]
+    _attr_event_types = ["message_received", "reaction_received"]
 
     @property
     def available(self):
@@ -30,6 +30,6 @@ class SignalMessageEvent(SignalEntity, EventEntity):
         )
 
     @callback
-    def _message(self):
-        self._trigger_event("message_received")
+    def _message(self, event_type):
+        self._trigger_event(event_type)
         self.async_write_ha_state()

@@ -11,7 +11,7 @@ def group_recipient(internal_id: str) -> str:
 
 
 @dataclass(frozen=True)
-class Message:
+class IncomingEvent:
     account: str
     sender_uuid: str | None
     sender_number: str | None
@@ -19,9 +19,6 @@ class Message:
     timestamp: int
     conversation_id: str
     conversation_kind: str
-    text: str
-    attachments: list[dict]
-    quote: dict | None
 
     @property
     def sender(self) -> str:
@@ -35,7 +32,7 @@ class Message:
             self.source_device,
             self.timestamp,
             self.conversation_id,
-            "message",
+            type(self).__name__,
         )
 
     def allowed(self, senders: list[str], groups: list[str]) -> bool:
@@ -48,8 +45,34 @@ class Message:
         return {"schema_version": 1, **asdict(self)}
 
 
-def normalize_message(raw: Any, account: str) -> Message | None:
-    """Accept REST/push envelopes. Ignore sync echoes and non-message events."""
+@dataclass(frozen=True)
+class Message(IncomingEvent):
+    text: str
+    attachments: list[dict]
+    quote: dict | None
+
+
+@dataclass(frozen=True)
+class Reaction(IncomingEvent):
+    emoji: str
+    target_author: str
+    target_author_number: str | None
+    target_author_uuid: str | None
+    target_timestamp: int
+    removed: bool
+
+    @property
+    def dedup_key(self) -> tuple:
+        return (
+            *super().dedup_key,
+            self.target_author,
+            self.target_timestamp,
+            self.emoji,
+            self.removed,
+        )
+
+
+def _envelope(raw: Any, account: str):
     if not isinstance(raw, dict):
         return None
     if isinstance(raw.get("params"), dict):
@@ -62,6 +85,52 @@ def normalize_message(raw: Any, account: str) -> Message | None:
     data = envelope.get("dataMessage")
     if not isinstance(data, dict):
         return None
+    return envelope, data
+
+
+def normalize_event(raw: Any, account: str) -> IncomingEvent | None:
+    parts = _envelope(raw, account)
+    if parts is None:
+        return None
+    envelope, data = parts
+    if "reaction" not in data:
+        return normalize_message(raw, account)
+    reaction = data["reaction"]
+    context = _context(envelope, data, account)
+    if context is None or not isinstance(reaction, dict):
+        return None
+    emoji = reaction.get("emoji")
+    timestamp = reaction.get("targetSentTimestamp")
+    removed = reaction.get("isRemove")
+    number = reaction.get("targetAuthorNumber")
+    uuid = reaction.get("targetAuthorUuid")
+    legacy = reaction.get("targetAuthor")
+    number = number if isinstance(number, str) and number else None
+    uuid = uuid if isinstance(uuid, str) and uuid else None
+    if isinstance(legacy, str) and legacy:
+        if legacy.startswith("+"):
+            number = number or legacy
+        else:
+            uuid = uuid or legacy
+    author = uuid or number
+    if (
+        not author
+        or not isinstance(emoji, str)
+        or not emoji
+        or type(timestamp) is not int
+        or timestamp <= 0
+        or type(removed) is not bool
+    ):
+        return None
+    return Reaction(*context, emoji, author, number, uuid, timestamp, removed)
+
+
+def normalize_message(raw: Any, account: str) -> Message | None:
+    """Accept REST/push envelopes. Ignore sync echoes and non-message events."""
+    parts = _envelope(raw, account)
+    if parts is None:
+        return None
+    envelope, data = parts
     if any(
         data.get(key) is not None
         for key in (
@@ -81,6 +150,32 @@ def normalize_message(raw: Any, account: str) -> Message | None:
         text = ""
     if not text and not attachments:
         return None
+    context = _context(envelope, data, account)
+    if context is None:
+        return None
+    safe_attachments = []
+    for attachment in attachments[:20]:
+        if isinstance(attachment, dict):
+            safe_attachments.append(
+                {
+                    k: v
+                    for k, v in attachment.items()
+                    if k in {"id", "contentType", "filename", "size", "width", "height"}
+                    and isinstance(v, (str, int))
+                }
+            )
+    quoted = data.get("quote")
+    safe_quote = None
+    if isinstance(quoted, dict):
+        safe_quote = {
+            k: v
+            for k, v in quoted.items()
+            if k in {"id", "author", "text"} and isinstance(v, (str, int))
+        }
+    return Message(*context, text, safe_attachments, safe_quote)
+
+
+def _context(envelope: dict, data: dict, account: str) -> tuple | None:
     timestamp = data.get("timestamp", envelope.get("timestamp"))
     if type(timestamp) is not int or timestamp <= 0:
         return None
@@ -111,27 +206,8 @@ def normalize_message(raw: Any, account: str) -> Message | None:
     else:
         conversation = number or uuid
         kind = "direct"
-    safe_attachments = []
-    for attachment in attachments[:20]:
-        if isinstance(attachment, dict):
-            safe_attachments.append(
-                {
-                    k: v
-                    for k, v in attachment.items()
-                    if k in {"id", "contentType", "filename", "size", "width", "height"}
-                    and isinstance(v, (str, int))
-                }
-            )
-    quoted = data.get("quote")
-    safe_quote = None
-    if isinstance(quoted, dict):
-        safe_quote = {
-            k: v
-            for k, v in quoted.items()
-            if k in {"id", "author", "text"} and isinstance(v, (str, int))
-        }
     device = envelope.get("sourceDevice")
-    return Message(
+    return (
         account,
         uuid,
         number,
@@ -139,7 +215,4 @@ def normalize_message(raw: Any, account: str) -> Message | None:
         timestamp,
         conversation,
         kind,
-        text,
-        safe_attachments,
-        safe_quote,
     )

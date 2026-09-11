@@ -17,26 +17,8 @@ from custom_components.signal_messenger_rest.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 
-from .test_config_flow import CONNECTION, SETTINGS
+from .test_config_flow import CONNECTION
 from .test_models import RAW
-
-
-@pytest.fixture
-def entry(hass):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Signal test",
-        data={**CONNECTION, "account": "+12025550100"},
-        options={
-            **SETTINGS,
-            "destinations": [
-                {"id": "alice", "recipient": "+12025550101", "name": "Alice"},
-                {"id": "group", "recipient": "group.test", "name": "Household"},
-            ],
-        },
-    )
-    entry.add_to_hass(hass)
-    return entry
 
 
 async def test_entities_sending_and_unload(hass, entry, api_mock):

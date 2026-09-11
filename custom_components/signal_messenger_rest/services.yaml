@@ -40,3 +40,49 @@ send_message:
       selector:
         text:
           multiline: true
+
+send_reaction:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: signal_messenger_rest
+    recipient:
+      required: true
+      selector:
+        text:
+    target_author:
+      required: true
+      selector:
+        text:
+    timestamp:
+      required: true
+      selector:
+        text:
+    emoji:
+      required: true
+      selector:
+        text:
+
+remove_reaction:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: signal_messenger_rest
+    recipient:
+      required: true
+      selector:
+        text:
+    target_author:
+      required: true
+      selector:
+        text:
+    timestamp:
+      required: true
+      selector:
+        text:
+    emoji:
+      required: false
+      selector:
+        text:

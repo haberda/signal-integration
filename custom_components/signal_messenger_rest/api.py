@@ -237,3 +237,26 @@ class SignalClient:
             raise CannotConnect("WebSocket handshake failed") from err
         except (aiohttp.ClientError, TimeoutError) as err:
             raise CannotConnect("Receive stream disconnected") from err
+
+    async def react(
+        self,
+        account: str,
+        recipient: str,
+        target_author: str,
+        timestamp: int,
+        emoji: str = "",
+        *,
+        remove: bool = False,
+    ) -> None:
+        """Send/remove a reaction without retrying uncertain requests."""
+        async with self.lock:
+            await self.request(
+                "DELETE" if remove else "POST",
+                f"v1/reactions/{quote(account, safe='')}",
+                data={
+                    "recipient": recipient,
+                    "target_author": target_author,
+                    "timestamp": timestamp,
+                    "reaction": emoji,
+                },
+            )

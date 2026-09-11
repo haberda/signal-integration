@@ -13,8 +13,16 @@ from homeassistant.util import dt as dt_util
 
 from .api import InvalidAuth, SignalClient, SignalError
 from .attachments import encode_attachments
-from .const import CONF_ACCOUNT, CONF_GROUPS, CONF_SENDERS, DOMAIN, EVENT_MESSAGE, MODES
-from .models import Message
+from .const import (
+    CONF_ACCOUNT,
+    CONF_GROUPS,
+    CONF_SENDERS,
+    DOMAIN,
+    EVENT_MESSAGE,
+    EVENT_REACTION,
+    MODES,
+)
+from .models import IncomingEvent, Reaction
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,7 +81,7 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         self.entry.async_start_reauth(self.hass)
 
     @callback
-    def receive_message(self, message: Message) -> None:
+    def receive_message(self, message: IncomingEvent) -> None:
         options = self.entry.options
         if not message.allowed(
             options.get(CONF_SENDERS, []), options.get(CONF_GROUPS, [])
@@ -81,14 +89,20 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
             return
         self.last_received = dt_util.utcnow()
         self.hass.bus.async_fire(
-            EVENT_MESSAGE,
+            EVENT_REACTION if isinstance(message, Reaction) else EVENT_MESSAGE,
             {
                 **message.payload(),
                 "config_entry_id": self.entry.entry_id,
                 "received_at": self.last_received.isoformat(),
             },
         )
-        async_dispatcher_send(self.hass, self.message_signal)
+        async_dispatcher_send(
+            self.hass,
+            self.message_signal,
+            "reaction_received"
+            if isinstance(message, Reaction)
+            else "message_received",
+        )
         self.async_update_listeners()
 
     async def send_message(
@@ -168,3 +182,22 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
                     )
             self.async_update_listeners()
         return {"success": all(r["success"] for r in results), "results": results}
+
+    async def react(
+        self,
+        recipient: str,
+        target_author: str,
+        timestamp: int,
+        emoji: str = "",
+        *,
+        remove: bool = False,
+    ) -> None:
+        try:
+            await self.client.react(
+                self.account, recipient, target_author, timestamp, emoji, remove=remove
+            )
+        except InvalidAuth:
+            self.auth_failed()
+            raise ServiceValidationError("API authentication failed") from None
+        except SignalError as err:
+            raise ServiceValidationError(str(err)) from None

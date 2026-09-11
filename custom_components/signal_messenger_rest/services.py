@@ -26,25 +26,41 @@ SEND_SCHEMA = vol.Schema(
 )
 
 
+REACTION_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): cv.string,
+        vol.Required("recipient"): vol.All(cv.string, vol.Strip, vol.Length(min=1)),
+        vol.Required("target_author"): vol.All(cv.string, vol.Strip, vol.Length(min=1)),
+        vol.Required("timestamp"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Required("emoji"): vol.All(cv.string, vol.Strip, vol.Length(min=1, max=64)),
+    }
+)
+REMOVE_REACTION_SCHEMA = REACTION_SCHEMA.extend(
+    {vol.Optional("emoji", default=""): cv.string}
+)
+
+
+def resolve_entry(hass: HomeAssistant, requested: str | None):
+    entries = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if e.state == ConfigEntryState.LOADED
+        and (not requested or e.entry_id == requested)
+    ]
+    if len(entries) != 1:
+        raise ServiceValidationError(
+            "Select one loaded Signal account using config_entry_id"
+        )
+    return entries[0]
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, "send_message"):
         return
 
     async def send(call: ServiceCall):
-        entries = [
-            e
-            for e in hass.config_entries.async_entries(DOMAIN)
-            if e.state == ConfigEntryState.LOADED
-        ]
-        requested = call.data.get("config_entry_id")
-        if requested:
-            entries = [e for e in entries if e.entry_id == requested]
-        if len(entries) != 1:
-            raise ServiceValidationError(
-                "Select one loaded Signal account using config_entry_id"
-            )
-        entry = entries[0]
+        entry = resolve_entry(hass, call.data.get("config_entry_id"))
         fields = dict(call.data)
         fields.pop("config_entry_id", None)
         recipients = fields.pop(
@@ -64,4 +80,17 @@ def async_setup_services(hass: HomeAssistant) -> None:
         send,
         schema=SEND_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
+    )
+
+    async def react(call: ServiceCall):
+        entry = resolve_entry(hass, call.data.get("config_entry_id"))
+        fields = dict(call.data)
+        fields.pop("config_entry_id", None)
+        await entry.runtime_data.react(
+            **fields, remove=call.service == "remove_reaction"
+        )
+
+    hass.services.async_register(DOMAIN, "send_reaction", react, schema=REACTION_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, "remove_reaction", react, schema=REMOVE_REACTION_SCHEMA
     )
