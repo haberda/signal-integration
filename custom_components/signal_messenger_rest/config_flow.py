@@ -251,10 +251,9 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
                         for e in self._async_current_entries()
                     ):
                         return self.async_abort(reason="already_configured")
-                    self.hass.config_entries.async_update_entry(
-                        entry, unique_id=unique_id
+                    return self.async_update_reload_and_abort(
+                        entry, data_updates=data, unique_id=unique_id
                     )
-                    return self.async_update_reload_and_abort(entry, data_updates=data)
             except (SignalError, ValueError) as err:
                 errors["base"] = error_key(err)
         return self.async_show_form(
@@ -265,6 +264,9 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class SignalOptionsFlow(OptionsFlow):
+    def __init__(self):
+        self._choices = {}
+
     async def async_step_init(self, user_input=None):
         errors = {}
         choices = {
@@ -280,10 +282,11 @@ class SignalOptionsFlow(OptionsFlow):
                 )
             except CannotConnect, SignalError:
                 pass
+        self._choices.update(choices)
         if user_input is not None:
             try:
                 options = make_options(
-                    user_input, choices, dict(self.config_entry.options)
+                    user_input, self._choices, dict(self.config_entry.options)
                 )
             except ValueError:
                 errors["base"] = "no_destinations"

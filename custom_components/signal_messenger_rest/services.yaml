@@ -1,0 +1,42 @@
+send_message:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: signal_messenger_rest
+    recipients:
+      selector:
+        text:
+          multiple: true
+    message:
+      selector:
+        text:
+          multiline: true
+    title:
+      selector:
+        text:
+    attachments:
+      selector:
+        text:
+          multiple: true
+    urls:
+      selector:
+        text:
+          multiple: true
+    text_mode:
+      default: normal
+      selector:
+        select:
+          options:
+            - normal
+            - styled
+    quote_timestamp:
+      selector:
+        text:
+    quote_author:
+      selector:
+        text:
+    quote_message:
+      selector:
+        text:
+          multiline: true
