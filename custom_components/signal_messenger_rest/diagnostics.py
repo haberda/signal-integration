@@ -7,6 +7,8 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "api_reachable": runtime.last_update_success,
         "receiver_connected": runtime.connected,
         "mode": runtime.client.mode,
+        "filtered_events": runtime.filtered_events,
+        "pending_alerts": len(runtime.alert_tasks),
         "receiving_enabled": entry.options.get("receive", False),
         "destination_count": len(entry.options.get("destinations", [])),
         "allowed_sender_count": len(entry.options.get("allowed_senders", [])),

@@ -42,6 +42,7 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         self.client = client
         self.account = entry.data[CONF_ACCOUNT]
         self.data = about
+        self.filtered_events = 0
         self.connected = False
         self.last_received = None
         self.last_sent = None
@@ -87,6 +88,7 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         if not message.allowed(
             options.get(CONF_SENDERS, []), options.get(CONF_GROUPS, [])
         ):
+            self.filtered_events += 1
             return
         self.last_received = dt_util.utcnow()
         self.hass.bus.async_fire(

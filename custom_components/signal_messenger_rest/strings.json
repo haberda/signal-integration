@@ -20,13 +20,14 @@
       },
       "settings": {
         "title": "Destinations and receiving",
-        "description": "Choose contacts/groups or enter recipients manually. Incoming events require an allowed sender. Group messages also require an allowed group (use the group. ID). Empty sender lists deny all messages. For normal/native mode, disable automatic receiving and other receivers in the backend first.",
+        "description": "Choose notification destinations and permitted senders/groups by name, or enter identifiers manually. Group events require BOTH an allowed sender and group. Empty sender lists deny all incoming events. Selecting a test destination sends one fixed test message when you submit; leave it blank to send nothing. In normal/native mode, disable other receivers and automatic receiving in the backend first.",
         "data": {
           "destinations": "Notification destinations",
           "receive": "Enable receiving",
           "allowed_senders": "Allowed sender numbers or UUIDs",
           "allowed_groups": "Allowed group IDs",
-          "poll_interval": "Polling interval"
+          "poll_interval": "Polling interval",
+          "test_recipient": "Optional test message destination"
         }
       },
       "reconfigure": {
@@ -55,7 +56,8 @@
       "invalid_url": "Enter an HTTP(S) URL without credentials, query or fragment.",
       "unsupported_server": "The server must expose v2 sending and a recognized execution mode.",
       "no_destinations": "Select or enter at least one destination.",
-      "account_missing": "The selected account is no longer linked to this backend."
+      "account_missing": "The selected account is no longer linked to this backend.",
+      "test_failed": "The test send failed or its delivery is uncertain. No settings were saved. Check the backend URL, proxy credentials and account linkage. Test sending is now disabled; select a destination again only if you intend to send another test."
     },
     "abort": {
       "no_accounts": "No accounts found. Link your phone in the backend, then add this integration again.",
@@ -70,18 +72,20 @@
     "step": {
       "init": {
         "title": "Destinations and receiving",
-        "description": "Choose contacts/groups or enter recipients manually. Incoming events require an allowed sender. Group messages also require an allowed group (use the group. ID). Empty sender lists deny all messages. For normal/native mode, disable automatic receiving and other receivers in the backend first.",
+        "description": "Choose notification destinations and permitted senders/groups by name, or enter identifiers manually. Group events require BOTH an allowed sender and group. Empty sender lists deny all incoming events. Selecting a test destination sends one fixed test message when you submit; leave it blank to send nothing. In normal/native mode, disable other receivers and automatic receiving in the backend first.",
         "data": {
           "destinations": "Notification destinations",
           "receive": "Enable receiving",
           "allowed_senders": "Allowed sender numbers or UUIDs",
           "allowed_groups": "Allowed group IDs",
-          "poll_interval": "Polling interval"
+          "poll_interval": "Polling interval",
+          "test_recipient": "Optional test message destination"
         }
       }
     },
     "error": {
-      "no_destinations": "Select or enter at least one destination."
+      "no_destinations": "Select or enter at least one destination.",
+      "test_failed": "The test send failed or its delivery is uncertain. No settings were saved. Check the backend URL, proxy credentials and account linkage. Test sending is now disabled; select a destination again only if you intend to send another test."
     }
   },
   "entity": {
@@ -98,7 +102,7 @@
         "name": "Last successful send"
       },
       "last_received": {
-        "name": "Last authorized message"
+        "name": "Last authorized activity"
       }
     },
     "event": {

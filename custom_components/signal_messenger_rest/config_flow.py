@@ -58,6 +58,29 @@ def connection_schema(defaults: dict) -> vol.Schema:
     )
 
 
+def permission_selector(choices: dict[str, str], *, groups: bool) -> SelectSelector:
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=[
+                {"value": key, "label": label}
+                for key, label in choices.items()
+                if key.startswith("group.") == groups
+            ],
+            multiple=True,
+            custom_value=True,
+            mode=SelectSelectorMode.DROPDOWN,
+        )
+    )
+
+
+async def test_destination(client: SignalClient, account: str, recipient: str) -> None:
+    result = await client.send(
+        account, [recipient], "Home Assistant Signal integration test."
+    )
+    if result.get("errors"):
+        raise SignalError("Test send failed")
+
+
 def options_schema(choices: dict[str, str], defaults: dict) -> vol.Schema:
     selected = [d["recipient"] for d in defaults.get(CONF_DESTINATIONS, [])]
     return vol.Schema(
@@ -77,10 +100,20 @@ def options_schema(choices: dict[str, str], defaults: dict) -> vol.Schema:
             ): BooleanSelector(),
             vol.Required(
                 CONF_SENDERS, default=defaults.get(CONF_SENDERS, [])
-            ): TextSelector(TextSelectorConfig(multiple=True)),
+            ): permission_selector(choices, groups=False),
             vol.Required(
                 CONF_GROUPS, default=defaults.get(CONF_GROUPS, [])
-            ): TextSelector(TextSelectorConfig(multiple=True)),
+            ): permission_selector(choices, groups=True),
+            vol.Optional("test_recipient", default=""): SelectSelector(
+                SelectSelectorConfig(
+                    options=[{"value": "", "label": "Do not send a test message"}]
+                    + [
+                        {"value": key, "label": label} for key, label in choices.items()
+                    ],
+                    custom_value=True,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
             vol.Required(
                 CONF_INTERVAL, default=defaults.get(CONF_INTERVAL, DEFAULT_INTERVAL)
             ): NumberSelector(
@@ -108,6 +141,7 @@ def make_options(data: dict, choices: dict, previous: dict | None = None) -> dic
         )
     if not destinations:
         raise ValueError("Select at least one destination")
+    data = {k: v for k, v in data.items() if k != "test_recipient"}
     return {
         **data,
         CONF_DESTINATIONS: destinations,
@@ -202,9 +236,16 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_settings(self, user_input=None):
         errors = {}
+        options = {}
         if user_input is not None:
             try:
                 options = make_options(user_input, self._choices)
+                if recipient := user_input.get("test_recipient", "").strip():
+                    await test_destination(
+                        self._client, self._data[CONF_ACCOUNT], recipient
+                    )
+            except SignalError:
+                errors["base"] = "test_failed"
             except ValueError:
                 errors["base"] = "no_destinations"
             else:
@@ -215,7 +256,7 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         return self.async_show_form(
             step_id="settings",
-            data_schema=options_schema(self._choices, {}),
+            data_schema=options_schema(self._choices, options),
             errors=errors,
         )
 
@@ -269,6 +310,7 @@ class SignalOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         errors = {}
+        options = dict(self.config_entry.options)
         choices = {
             d["recipient"]: d["name"]
             for d in self.config_entry.options.get(CONF_DESTINATIONS, [])
@@ -288,12 +330,24 @@ class SignalOptionsFlow(OptionsFlow):
                 options = make_options(
                     user_input, self._choices, dict(self.config_entry.options)
                 )
+                if recipient := user_input.get("test_recipient", "").strip():
+                    entry = self.config_entry
+                    runtime = getattr(entry, "runtime_data", None)
+                    client = (
+                        runtime.client if runtime else client_for(self.hass, entry.data)
+                    )
+                    await test_destination(client, entry.data[CONF_ACCOUNT], recipient)
+            except SignalError:
+                errors["base"] = "test_failed"
             except ValueError:
                 errors["base"] = "no_destinations"
             else:
                 return self.async_create_entry(data=options)
         return self.async_show_form(
             step_id="init",
-            data_schema=options_schema(choices, dict(self.config_entry.options)),
+            data_schema=options_schema(
+                self._choices,
+                options,
+            ),
             errors=errors,
         )

@@ -173,3 +173,71 @@ async def test_reconfigure_wrong_account(hass, api_mock):
     )
     assert result["errors"] == {"base": "account_missing"}
     assert entry.data["url"] == CONNECTION["url"]
+
+
+def test_permission_pickers_keep_custom_values():
+    from custom_components.signal_messenger_rest.config_flow import options_schema
+
+    schema = options_schema({"+12025550101": "Alice", "group.test": "Household"}, {})
+    selectors = {str(key): value for key, value in schema.schema.items()}
+    assert selectors["allowed_senders"].config["options"] == [
+        {"value": "+12025550101", "label": "Alice"}
+    ]
+    assert selectors["allowed_groups"].config["options"] == [
+        {"value": "group.test", "label": "Household"}
+    ]
+    assert selectors["allowed_senders"](["manual-uuid"]) == ["manual-uuid"]
+
+
+async def test_optional_setup_test_message(hass, api_mock):
+    with (
+        patch(
+            "custom_components.signal_messenger_rest.async_setup_entry",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.signal_messenger_rest.api.SignalClient.send",
+            new_callable=AsyncMock,
+            return_value={"timestamp": "123"},
+        ) as send,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}, data=CONNECTION
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"account": "+12025550100"}
+        )
+        send.assert_not_awaited()
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {**SETTINGS, "test_recipient": "+12025550101"}
+        )
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        send.assert_awaited_once_with(
+            "+12025550100", ["+12025550101"], "Home Assistant Signal integration test."
+        )
+        assert "test_recipient" not in result["options"]
+        await hass.async_block_till_done()
+
+
+async def test_failed_options_test_does_not_save_or_repeat(hass, entry, api_mock):
+    with patch(
+        "custom_components.signal_messenger_rest.api.SignalClient.send",
+        new_callable=AsyncMock,
+        side_effect=CannotConnect(),
+    ) as send:
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {**SETTINGS, "test_recipient": "+12025550101"}
+        )
+        assert result["errors"] == {"base": "test_failed"}
+        assert len(entry.options["destinations"]) == 2
+        marker = next(
+            key for key in result["data_schema"].schema if str(key) == "test_recipient"
+        )
+        assert marker.default() == ""
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], SETTINGS
+        )
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert send.await_count == 1
+        assert "test_recipient" not in entry.options
