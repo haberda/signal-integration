@@ -48,6 +48,7 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         self.receiver = None
         self.receiver_task = None
         self.send_lock = asyncio.Lock()
+        self.alert_tasks: set[asyncio.Task] = set()
 
     @property
     def message_signal(self) -> str:
@@ -201,3 +202,10 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
             raise ServiceValidationError("API authentication failed") from None
         except SignalError as err:
             raise ServiceValidationError(str(err)) from None
+
+    async def stop_alerts(self) -> None:
+        tasks = list(self.alert_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)

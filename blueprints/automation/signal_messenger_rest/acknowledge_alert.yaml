@@ -1,0 +1,78 @@
+blueprint:
+  name: Signal - repeat an alert until acknowledged
+  description: >-
+    When a binary sensor turns on, send an alert and quote it in reminders until
+    an approved person reacts to the ORIGINAL message with the selected emoji,
+    the sensor turns off, or the expiry elapses. Receiving and sender/group
+    permissions must be configured first. HA restart/reload cancels pending alerts.
+  domain: automation
+  input:
+    account:
+      name: Signal account
+      selector:
+        config_entry:
+          integration: signal_messenger_rest
+    alert_entity:
+      name: Alert sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    recipient:
+      name: Destination number, UUID or REST group ID
+      selector:
+        text:
+    message:
+      name: Alert message
+      default: Please check the house. React to this message to acknowledge it.
+      selector:
+        template:
+    emoji:
+      name: Acknowledgment emoji
+      default: "✅"
+      selector:
+        text:
+    account_author:
+      name: Sending account UUID (if its number is hidden in reactions)
+      default: ""
+      selector:
+        text:
+    expiry:
+      name: Alert expiry (seconds)
+      default: 600
+      selector:
+        number:
+          min: 1
+          max: 86400
+          mode: box
+    reminder_interval:
+      name: Reminder interval (seconds)
+      default: 120
+      selector:
+        number:
+          min: 1
+          max: 86400
+          mode: box
+triggers:
+  - trigger: state
+    entity_id: !input alert_entity
+    to: "on"
+  - trigger: state
+    entity_id: !input alert_entity
+    to: "off"
+conditions: []
+actions:
+  - if:
+      - condition: state
+        entity_id: !input alert_entity
+        state: "on"
+    then:
+      - action: signal_messenger_rest.send_alert
+        data:
+          config_entry_id: !input account
+          recipient: !input recipient
+          message: !input message
+          emoji: !input emoji
+          account_author: !input account_author
+          expiry: !input expiry
+          reminder_interval: !input reminder_interval
+mode: restart

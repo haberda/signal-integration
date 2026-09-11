@@ -46,3 +46,32 @@ async def test_reply_blueprint(hass):
     config = PLATFORM_SCHEMA(instance.async_substitute())
     assert config["triggers"][0]["event_data"]["text"] == "/status"
     assert config["actions"][0]["action"] == "signal_messenger_rest.send_message"
+
+
+async def test_acknowledgment_blueprint(hass):
+    data = load_yaml(
+        str(ROOT / "blueprints/automation/signal_messenger_rest/acknowledge_alert.yaml")
+    )
+    blueprint = Blueprint(
+        data, expected_domain="automation", schema=AUTOMATION_BLUEPRINT_SCHEMA
+    )
+    instance = BlueprintInputs(
+        blueprint,
+        {
+            "use_blueprint": {
+                "path": "acknowledge_alert.yaml",
+                "input": {
+                    "account": "test-entry",
+                    "alert_entity": "binary_sensor.garage",
+                    "recipient": "group.test",
+                },
+            }
+        },
+    )
+    instance.validate()
+    config = PLATFORM_SCHEMA(instance.async_substitute())
+    assert config["mode"] == "restart"
+    assert [t["to"] for t in config["triggers"]] == ["on", "off"]
+    assert (
+        config["actions"][0]["then"][0]["action"] == "signal_messenger_rest.send_alert"
+    )

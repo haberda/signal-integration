@@ -213,6 +213,40 @@
           "description": "Reaction emoji; optional when removing a reaction."
         }
       }
+    },
+    "send_alert": {
+      "name": "Send alert and wait for acknowledgment",
+      "description": "Send an alert and reminders until an approved reaction to the original message or expiry. Restart/reload cancels the wait.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Account with receiving enabled."
+        },
+        "recipient": {
+          "name": "Destination",
+          "description": "Phone number, UUID or REST group. ID; usernames are not supported for correlation."
+        },
+        "message": {
+          "name": "Alert message",
+          "description": "Message to send and repeat in reminders."
+        },
+        "emoji": {
+          "name": "Acknowledgment emoji",
+          "description": "Exact emoji that acknowledges the original message."
+        },
+        "account_author": {
+          "name": "Sending account UUID",
+          "description": "Set if reaction events hide the sending account phone number. Not the reacting person."
+        },
+        "expiry": {
+          "name": "Expiry",
+          "description": "Seconds to wait after sending the original alert."
+        },
+        "reminder_interval": {
+          "name": "Reminder interval",
+          "description": "Seconds between reminders. Set greater than expiry to disable reminders."
+        }
+      }
     }
   }
 }

@@ -86,3 +86,42 @@ remove_reaction:
       required: false
       selector:
         text:
+
+send_alert:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: signal_messenger_rest
+    recipient:
+      required: true
+      selector:
+        text:
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+    emoji:
+      default: "✅"
+      selector:
+        text:
+    account_author:
+      selector:
+        text:
+    expiry:
+      default: 600
+      selector:
+        number:
+          min: 1
+          max: 86400
+          mode: box
+          unit_of_measurement: s
+    reminder_interval:
+      default: 120
+      selector:
+        number:
+          min: 1
+          max: 86400
+          mode: box
+          unit_of_measurement: s

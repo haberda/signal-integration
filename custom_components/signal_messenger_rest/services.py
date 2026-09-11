@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse, cal
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
+from .alerts import send_alert
 from .const import CONF_DESTINATIONS, DOMAIN
 
 SEND_SCHEMA = vol.Schema(
@@ -37,6 +38,25 @@ REACTION_SCHEMA = vol.Schema(
 )
 REMOVE_REACTION_SCHEMA = REACTION_SCHEMA.extend(
     {vol.Optional("emoji", default=""): cv.string}
+)
+
+
+ALERT_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): cv.string,
+        vol.Required("recipient"): vol.All(cv.string, vol.Strip, vol.Length(min=1)),
+        vol.Required("message"): vol.All(cv.string, vol.Length(min=1, max=9000)),
+        vol.Optional("emoji", default="✅"): vol.All(
+            cv.string, vol.Strip, vol.Length(min=1, max=64)
+        ),
+        vol.Optional("account_author", default=""): cv.string,
+        vol.Optional("expiry", default=600): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=86400)
+        ),
+        vol.Optional("reminder_interval", default=120): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=86400)
+        ),
+    }
 )
 
 
@@ -93,4 +113,18 @@ def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, "send_reaction", react, schema=REACTION_SCHEMA)
     hass.services.async_register(
         DOMAIN, "remove_reaction", react, schema=REMOVE_REACTION_SCHEMA
+    )
+
+    async def alert(call: ServiceCall):
+        entry = resolve_entry(hass, call.data.get("config_entry_id"))
+        fields = dict(call.data)
+        fields.pop("config_entry_id", None)
+        return await send_alert(entry.runtime_data, **fields)
+
+    hass.services.async_register(
+        DOMAIN,
+        "send_alert",
+        alert,
+        schema=ALERT_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
