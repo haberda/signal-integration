@@ -122,7 +122,7 @@ class SignalClient:
         about = await self.request("GET", "v1/about", request_timeout=15)
         if not isinstance(about, dict) or about.get("mode") not in MODES:
             raise UnsupportedServer("Unsupported or missing execution mode")
-        if "v2" not in about.get("versions", []):
+        if not isinstance(about.get("versions"), list) or "v2" not in about["versions"]:
             raise UnsupportedServer("The API must support v2 sending")
         accounts = await self.request("GET", "v1/accounts", request_timeout=30)
         if not isinstance(accounts, list) or not all(
@@ -207,14 +207,16 @@ class SignalClient:
         url = URL(self.endpoint(f"v1/receive/{quote(account, safe='')}"))
         url = url.with_scheme("wss" if url.scheme == "https" else "ws")
         try:
-            async with self.session.ws_connect(
-                url,
-                headers=self.headers,
-                ssl=self.ssl,
-                autoping=True,
-                heartbeat=30,
-                max_msg_size=MAX_RESPONSE_BYTES,
-            ) as ws:
+            async with asyncio.timeout(15):
+                ws = await self.session.ws_connect(
+                    url,
+                    headers=self.headers,
+                    ssl=self.ssl,
+                    autoping=True,
+                    heartbeat=30,
+                    max_msg_size=MAX_RESPONSE_BYTES,
+                )
+            async with ws:
                 # The caller learns the handshake succeeded before any message arrives.
                 yield {"_connected": True}
                 async for frame in ws:
