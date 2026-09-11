@@ -5,6 +5,7 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
@@ -197,4 +198,84 @@ async def test_options_reload_removes_destination(hass, entry, api_mock):
     assert entry.state == ConfigEntryState.LOADED
     assert registry.async_get(alice)
     assert registry.async_get(group) is None
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_health_and_mode_change(hass, entry, api_mock):
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = entry.runtime_data
+    with patch.object(runtime.client, "request", new_callable=AsyncMock) as request:
+        request.side_effect = CannotConnect()
+        await runtime.async_refresh()
+        assert not runtime.last_update_success
+        request.side_effect = None
+        request.return_value = {"mode": "json-rpc", "version": "0.100"}
+        await runtime.async_refresh()
+        assert runtime.last_update_success
+        with patch.object(
+            hass.config_entries, "async_reload", new_callable=AsyncMock
+        ) as reload:
+            request.return_value = {"mode": "native"}
+            await runtime.async_refresh()
+            await hass.async_block_till_done()
+            reload.assert_awaited_once_with(entry.entry_id)
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"message": "", "recipients": []},
+        {"message": "reply", "quote_timestamp": 123},
+        {"message": "reply", "quote_message": "quote"},
+        {"message": ""},
+        {"message": "x" * 10001},
+    ],
+)
+async def test_bad_sends_do_not_touch_backend(hass, entry, api_mock, fields):
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    with patch.object(
+        entry.runtime_data.client, "send", new_callable=AsyncMock
+    ) as send:
+        with pytest.raises((ServiceValidationError, vol.Invalid)):
+            await hass.services.async_call(
+                DOMAIN, "send_message", fields, blocking=True
+            )
+        send.assert_not_awaited()
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_rich_send_local_attachment_and_self(hass, entry, api_mock, tmp_path):
+    file = tmp_path / "image.jpg"
+    file.write_bytes(b"photo")
+    hass.config.allowlist_external_dirs = {str(tmp_path)}
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    with patch.object(
+        entry.runtime_data.client,
+        "send",
+        new_callable=AsyncMock,
+        return_value={"timestamp": "123"},
+    ) as send:
+        response = await hass.services.async_call(
+            DOMAIN,
+            "send_message",
+            {
+                "config_entry_id": entry.entry_id,
+                "recipients": ["+12025550100"],
+                "message": "image",
+                "attachments": [str(file)],
+                "text_mode": "styled",
+                "quote_timestamp": 1000,
+                "quote_author": "sender-uuid",
+                "quote_message": "Original",
+            },
+            blocking=True,
+            return_response=True,
+        )
+        assert response["success"]
+        assert send.call_args.kwargs["base64_attachments"] == [
+            "data:image/jpeg;filename=image.jpg;base64,cGhvdG8="
+        ]
+        assert send.call_args.kwargs["text_mode"] == "styled"
+        assert send.call_args.kwargs["quote_message"] == "Original"
     await hass.config_entries.async_unload(entry.entry_id)

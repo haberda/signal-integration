@@ -124,3 +124,52 @@ async def test_reconfigure_preserves_account(hass, api_mock):
     assert entry.data["url"] == "http://new.test/prefix"
     assert entry.data["account"] == "+12025550100"
     assert entry.unique_id == "http://new.test/prefix|+12025550100"
+
+
+async def test_reauth(hass, api_mock):
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={**CONNECTION, "account": "+12025550100"}
+    )
+    entry.add_to_hass(hass)
+    with patch.object(hass.config_entries, "async_reload", new_callable=AsyncMock):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "reauth", "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {**CONNECTION, "password": "updated"}
+        )
+    assert result["reason"] == "reauth_successful"
+    assert entry.data["password"] == "updated"
+
+
+async def test_empty_destination_validation(hass, api_mock):
+    with patch(
+        "custom_components.signal_messenger_rest.async_setup_entry", return_value=True
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}, data=CONNECTION
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"account": "+12025550100"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {**SETTINGS, "destinations": []}
+        )
+        assert result["errors"] == {"base": "no_destinations"}
+
+
+async def test_reconfigure_wrong_account(hass, api_mock):
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={**CONNECTION, "account": "+12025550199"}
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**CONNECTION, "url": "http://new.test"}
+    )
+    assert result["errors"] == {"base": "account_missing"}
+    assert entry.data["url"] == CONNECTION["url"]

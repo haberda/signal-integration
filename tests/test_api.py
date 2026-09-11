@@ -133,3 +133,62 @@ async def test_send_not_retried(aiohttp_server):
         with pytest.raises(CannotConnect):
             await client.send("a", ["b"], "private")
     assert count == 1
+
+
+async def test_destination_discovery_and_optional_failure(aiohttp_server):
+    async def contacts(request):
+        return web.json_response(
+            [
+                {"number": "+12025550101", "name": "Alice"},
+                {"uuid": "sender-uuid", "profile_name": "Private number"},
+                {"name": "no address"},
+                "bad",
+            ]
+        )
+
+    async def groups(request):
+        return web.json_response([{"id": "group.test", "name": "Household"}])
+
+    app = web.Application()
+    app.router.add_get("/v1/contacts/{account}", contacts)
+    app.router.add_get("/v1/groups/{account}", groups)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        choices = await client.destinations("+12025550100")
+        assert choices == {
+            "+12025550101": "Alice (+12025550101)",
+            "sender-uuid": "Private number (sender-uuid)",
+            "group.test": "Household (group.test)",
+        }
+
+
+@pytest.mark.parametrize("status", [404, 401])
+async def test_missing_metadata_or_auth(aiohttp_server, status):
+    async def handler(request):
+        return web.Response(status=status)
+
+    app = web.Application()
+    app.router.add_get("/{tail:.*}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        if status == 401:
+            with pytest.raises(InvalidAuth):
+                await client.destinations("account")
+        else:
+            assert await client.destinations("account") == {}
+
+
+async def test_websocket_auth(aiohttp_server):
+    async def handler(request):
+        return web.Response(status=401)
+
+    app = web.Application()
+    app.router.add_get("/v1/receive/{account}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        with pytest.raises(InvalidAuth):
+            async for _ in client.messages("account"):
+                pass
