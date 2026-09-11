@@ -1,0 +1,41 @@
+blueprint:
+  name: Signal - reply to an authorized command
+  description: >-
+    Match an exact incoming command and reply in the same conversation.
+    Configure allowed senders and groups in the integration options first.
+    The response template can read Home Assistant states. Incoming message text
+    is never evaluated as a template or service name.
+  domain: automation
+  input:
+    account:
+      name: Signal account
+      selector:
+        config_entry:
+          integration: signal_messenger_rest
+    command:
+      name: Exact command
+      default: /status
+      selector:
+        text:
+    response:
+      name: Response
+      default: Home Assistant is running.
+      selector:
+        template:
+triggers:
+  - trigger: event
+    event_type: signal_messenger_rest_message_received
+    event_data:
+      config_entry_id: !input account
+      text: !input command
+conditions: []
+actions:
+  - action: signal_messenger_rest.send_message
+    data:
+      config_entry_id: "{{ trigger.event.data.config_entry_id }}"
+      recipients: "{{ [trigger.event.data.conversation_id] }}"
+      message: !input response
+      quote_timestamp: "{{ trigger.event.data.timestamp }}"
+      quote_author: "{{ trigger.event.data.sender_uuid or trigger.event.data.sender_number }}"
+mode: queued
+max: 10
