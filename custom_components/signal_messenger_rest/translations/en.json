@@ -1,0 +1,165 @@
+{
+  "title": "Signal Messenger REST",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Signal REST API",
+        "description": "Connect to an existing Signal add-on or standalone REST API. Link or register an account in that backend before continuing.",
+        "data": {
+          "url": "API URL",
+          "username": "Proxy username (optional)",
+          "password": "Proxy password (optional)",
+          "verify_ssl": "Verify TLS certificate"
+        }
+      },
+      "account": {
+        "title": "Select Signal account",
+        "data": {
+          "account": "Account"
+        }
+      },
+      "settings": {
+        "title": "Destinations and receiving",
+        "description": "Choose contacts/groups or enter recipients manually. Incoming events require an allowed sender. Group messages also require an allowed group (use the group. ID). Empty sender lists deny all messages. For normal/native mode, disable automatic receiving and other receivers in the backend first.",
+        "data": {
+          "destinations": "Notification destinations",
+          "receive": "Enable receiving",
+          "allowed_senders": "Allowed sender numbers or UUIDs",
+          "allowed_groups": "Allowed group IDs",
+          "poll_interval": "Polling interval"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconnect Signal account",
+        "description": "The existing account must be linked on the new endpoint.",
+        "data": {
+          "url": "API URL",
+          "username": "Proxy username (optional)",
+          "password": "Proxy password (optional)",
+          "verify_ssl": "Verify TLS certificate"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Update proxy credentials",
+        "data": {
+          "url": "API URL",
+          "username": "Proxy username (optional)",
+          "password": "Proxy password (optional)",
+          "verify_ssl": "Verify TLS certificate"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the Signal REST API. Check its URL and backend logs.",
+      "invalid_auth": "Proxy authentication failed. Check your credentials.",
+      "invalid_url": "Enter an HTTP(S) URL without credentials, query or fragment.",
+      "unsupported_server": "The server must expose v2 sending and a recognized execution mode.",
+      "no_destinations": "Select or enter at least one destination.",
+      "account_missing": "The selected account is no longer linked to this backend."
+    },
+    "abort": {
+      "no_accounts": "No accounts found. Link your phone in the backend, then add this integration again.",
+      "already_configured": "This backend and account are already configured.",
+      "account_missing": "The selected account is no longer linked to this backend.",
+      "invalid_auth": "Proxy authentication failed. Check your credentials.",
+      "reauth_successful": "Credentials updated.",
+      "reconfigure_successful": "Connection updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Destinations and receiving",
+        "description": "Choose contacts/groups or enter recipients manually. Incoming events require an allowed sender. Group messages also require an allowed group (use the group. ID). Empty sender lists deny all messages. For normal/native mode, disable automatic receiving and other receivers in the backend first.",
+        "data": {
+          "destinations": "Notification destinations",
+          "receive": "Enable receiving",
+          "allowed_senders": "Allowed sender numbers or UUIDs",
+          "allowed_groups": "Allowed group IDs",
+          "poll_interval": "Polling interval"
+        }
+      }
+    },
+    "error": {
+      "no_destinations": "Select or enter at least one destination."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "api_connected": {
+        "name": "API reachable"
+      },
+      "receiver_connected": {
+        "name": "Receiver connected"
+      }
+    },
+    "sensor": {
+      "last_sent": {
+        "name": "Last successful send"
+      },
+      "last_received": {
+        "name": "Last authorized message"
+      }
+    },
+    "event": {
+      "message": {
+        "name": "Incoming message",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "message_received": "Message received"
+            }
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "send_message": {
+      "name": "Send message",
+      "description": "Send text, attachments or a quoted reply. Returns per-destination results when response data is requested.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Select an account; required when more than one is loaded."
+        },
+        "recipients": {
+          "name": "Recipients",
+          "description": "Phone numbers, UUIDs, usernames or REST group. IDs. Omit to use configured destinations."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Text to send."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Prepended to the message, separated by a blank line."
+        },
+        "attachments": {
+          "name": "Local attachments",
+          "description": "Allowed local file paths. Maximum five files, 10 MiB each and 20 MiB combined."
+        },
+        "urls": {
+          "name": "Attachment URLs",
+          "description": "Allowlisted HTTP(S) URLs. Redirect destinations must also be allowed."
+        },
+        "text_mode": {
+          "name": "Text mode",
+          "description": "Use normal or Signal styled formatting."
+        },
+        "quote_timestamp": {
+          "name": "Original timestamp",
+          "description": "Original Signal message timestamp in milliseconds."
+        },
+        "quote_author": {
+          "name": "Original author",
+          "description": "Original sender number or UUID."
+        },
+        "quote_message": {
+          "name": "Quoted text",
+          "description": "Optional original message text."
+        }
+      }
+    }
+  }
+}
