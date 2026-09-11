@@ -1,0 +1,135 @@
+"""Exercise the actual HTTP and WebSocket client against a local server."""
+
+import aiohttp
+import pytest
+from aiohttp import web
+
+from custom_components.signal_messenger_rest.api import (
+    CannotConnect,
+    InvalidAuth,
+    InvalidResponse,
+    SignalClient,
+    SignalError,
+    normalize_url,
+)
+
+pytestmark = pytest.mark.usefixtures("socket_enabled")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ftp://host",
+        "http://user:pass@host",
+        "http://host?q=x",
+        "http://host/#x",
+        "host",
+        "http://host:bad",
+    ],
+)
+def test_bad_url(url):
+    with pytest.raises(ValueError):
+        normalize_url(url)
+
+
+async def test_http_contract(aiohttp_server):
+    seen = []
+
+    async def handler(request):
+        seen.append(request)
+        if request.path.endswith("about"):
+            return web.json_response({"mode": "native", "versions": ["v2"]})
+        if request.path.endswith("accounts"):
+            return web.json_response(["+12025550100"])
+        if request.method == "POST":
+            body = await request.json()
+            assert body["quote_timestamp"] == 123
+            assert body["notify_self"] is True
+            assert body["recipients"] == ["group.test"]
+            return web.json_response({"timestamp": "456", "errors": {"recipients": []}})
+        assert request.query["send_read_receipts"] == "false"
+        return web.json_response([])
+
+    app = web.Application()
+    app.router.add_route("*", "/proxy/{tail:.*}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(
+            session, str(server.make_url("/proxy/")), "name", "secret"
+        )
+        about, accounts = await client.discover()
+        assert client.mode == "native"
+        assert accounts == ["+12025550100"]
+        assert (
+            await client.send(accounts[0], ["group.test"], "hello", quote_timestamp=123)
+        )["timestamp"] == "456"
+        assert await client.receive(accounts[0]) == []
+    assert all(
+        r.headers["Authorization"] == aiohttp.encode_basic_auth("name", "secret")
+        for r in seen
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "error"),
+    [
+        (401, "secret", InvalidAuth),
+        (500, "private message", SignalError),
+        (200, "not json", InvalidResponse),
+        (302, "", SignalError),
+    ],
+)
+async def test_sanitized_errors(aiohttp_server, status, body, error):
+    async def handler(request):
+        return web.Response(status=status, text=body)
+
+    app = web.Application()
+    app.router.add_get("/v1/about", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        with pytest.raises(error) as exc:
+            await client.request("GET", "v1/about")
+        assert body not in str(exc.value) if body else True
+
+
+async def test_websocket(aiohttp_server):
+    async def handler(request):
+        assert request.headers["Authorization"] == aiohttp.encode_basic_auth(
+            "name", "secret"
+        )
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        await ws.send_str("invalid")
+        await ws.send_json({"envelope": {"timestamp": 123}})
+        await ws.close()
+        return ws
+
+    app = web.Application()
+    app.router.add_get("/prefix/v1/receive/{account}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(
+            session, str(server.make_url("/prefix")), "name", "secret"
+        )
+        messages = [m async for m in client.messages("+12025550100")]
+        assert messages == [{"_connected": True}, {"envelope": {"timestamp": 123}}]
+
+
+async def test_send_not_retried(aiohttp_server):
+    count = 0
+
+    async def handler(request):
+        nonlocal count
+        count += 1
+        request.transport.close()
+        return web.Response()
+
+    app = web.Application()
+    app.router.add_post("/v2/send", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        with pytest.raises(CannotConnect):
+            await client.send("a", ["b"], "private")
+    assert count == 1

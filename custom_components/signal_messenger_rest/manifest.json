@@ -1,0 +1,12 @@
+{
+  "domain": "signal_messenger_rest",
+  "name": "Signal Messenger REST",
+  "codeowners": ["@haberda"],
+  "config_flow": true,
+  "documentation": "https://git.haber.haus/haberda/signal-integration",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://git.haber.haus/haberda/signal-integration/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
