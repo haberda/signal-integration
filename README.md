@@ -305,3 +305,7 @@ Before a public release, validate these cases on a linked test account: direct/g
 The diagnostic `pending_alerts` count reports current waits without message contents or identities. Reaction fixtures were derived from the [signal-cli v0.14.5 JSON contract](https://github.com/AsamK/signal-cli/blob/v0.14.5/src/main/java/org/asamk/signal/json/JsonReaction.java) and are synthetic. Live validation should include phone-number-hidden accounts, direct/group reaction addition and removal, and acknowledgments arriving before a send response. No live backend is configured in this repository.
 
 See [development instructions](CONTRIBUTING.md) and [release notes](CHANGELOG.md).
+
+## AI assistance
+
+This integration was created with AI assistance, including help with planning, implementation, documentation, and automated tests.
