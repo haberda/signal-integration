@@ -8,6 +8,7 @@ from homeassistant.core import Context
 from homeassistant.helpers import chat_session
 
 from .models import Message
+from .typing_indicator import typing_indicator
 
 MAX_PENDING = 16
 MAX_SESSIONS = 64
@@ -271,7 +272,12 @@ class SignalAssist:
                     continue
                 self.active = True
                 self._updated()
-                await self._process(message, text)
+                async with typing_indicator(
+                    self.coordinator,
+                    message.conversation_id,
+                    self.settings.get("typing_indicator", False),
+                ):
+                    await self._process(message, text)
             finally:
                 self.active = False
                 self.queue.task_done()

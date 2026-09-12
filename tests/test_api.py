@@ -252,3 +252,25 @@ async def test_read_receipt_contract(aiohttp_server, status):
     assert seen == [
         {"recipient": "sender-uuid", "receipt_type": "read", "timestamp": 123}
     ]
+
+
+@pytest.mark.parametrize("recipient", ["+12025550101", "group.WVdKag=="])
+async def test_typing_contract(aiohttp_server, recipient):
+    seen = []
+
+    async def handler(request):
+        seen.append((request.method, await request.json()))
+        assert request.path == "/proxy/v1/typing-indicator/+12025550100"
+        return web.Response(status=204)
+
+    app = web.Application()
+    app.router.add_route("*", "/proxy/v1/typing-indicator/{account}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/proxy/")))
+        await client.set_typing("+12025550100", recipient, True)
+        await client.set_typing("+12025550100", recipient, False)
+    assert seen == [
+        ("PUT", {"recipient": recipient}),
+        ("DELETE", {"recipient": recipient}),
+    ]

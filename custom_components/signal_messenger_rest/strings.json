@@ -262,7 +262,11 @@
           "direct_mode": "Activation in direct chats",
           "prefix": "Command prefix",
           "conversation_timeout": "Conversation idle timeout",
-          "publish_events": "Also publish handled messages as events"
+          "publish_events": "Also publish handled messages as events",
+          "typing_indicator": "Show typing while Assist responds"
+        },
+        "data_description": {
+          "typing_indicator": "Attempt to show a typing indicator in the conversation while Assist processes a request and sends its reply."
         }
       },
       "destination_name": {

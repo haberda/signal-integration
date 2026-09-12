@@ -52,7 +52,10 @@ async def test_assist_validation(
         assert "assist" not in entry.options
 
 
-async def test_save_assist_and_other_options_preserve_each_other(hass, entry, api_mock):
+@pytest.mark.parametrize("typing", [False, True])
+async def test_save_assist_and_other_options_preserve_each_other(
+    hass, entry, api_mock, typing
+):
     hass.config_entries.async_update_entry(
         entry, options={**entry.options, "receive": True}
     )
@@ -60,7 +63,7 @@ async def test_save_assist_and_other_options_preserve_each_other(hass, entry, ap
     with patch(CHOICES, return_value={"test-pipeline": "Home"}):
         result = await open_assist(hass, entry)
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], ASSIST
+            result["flow_id"], {**ASSIST, "typing_indicator": typing}
         )
         assert result["type"] == FlowResultType.CREATE_ENTRY
         assert entry.options["destinations"] == destinations
@@ -70,7 +73,7 @@ async def test_save_assist_and_other_options_preserve_each_other(hass, entry, ap
         result["flow_id"], {"next_step_id": "settings"}
     )
     await hass.config_entries.options.async_configure(result["flow_id"], SETTINGS)
-    assert entry.options["assist"] == ASSIST
+    assert entry.options["assist"] == {**ASSIST, "typing_indicator": typing}
 
 
 async def test_disable_when_pipeline_is_unavailable(hass, entry, api_mock):

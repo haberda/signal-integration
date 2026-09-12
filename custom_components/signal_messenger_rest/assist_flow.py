@@ -135,6 +135,10 @@ class AssistFlowMixin:
                             unit_of_measurement="s",
                         )
                     ),
+                    vol.Optional(
+                        "typing_indicator",
+                        default=settings.get("typing_indicator", False),
+                    ): BooleanSelector(),
                     vol.Required(
                         "publish_events", default=settings.get("publish_events", False)
                     ): BooleanSelector(),

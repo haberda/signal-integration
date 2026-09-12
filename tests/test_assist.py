@@ -441,3 +441,122 @@ async def test_assist_status_transitions(runtime, hass):
         await runtime.assist.stop()
         assert runtime.assist.status == "stopped"
         await hass.async_block_till_done()
+
+
+@pytest.mark.parametrize("group", [False, True])
+async def test_typing_refreshes_and_stops_after_reply(runtime, group):
+    runtime.assist.settings = {**ASSIST, "typing_indicator": True}
+    refreshed = asyncio.Event()
+    calls = []
+
+    async def typing(account, recipient, active):
+        calls.append((recipient, active))
+        if len(calls) == 2:
+            refreshed.set()
+
+    async def pipeline(*args, **kwargs):
+        await refreshed.wait()
+        return "ok", "session"
+
+    runtime.client.set_typing = AsyncMock(side_effect=typing)
+    message = replace(
+        MESSAGE,
+        conversation_id="group.test" if group else "alice",
+        conversation_kind="group" if group else "direct",
+    )
+    with (
+        patch(TARGET, side_effect=pipeline),
+        patch(
+            "custom_components.signal_messenger_rest.typing_indicator.REFRESH_INTERVAL",
+            0.01,
+        ),
+    ):
+        runtime.assist.handle(message)
+        await drain(runtime)
+    assert calls[0] == (message.conversation_id, True)
+    assert calls[-1] == (message.conversation_id, False)
+    assert len(calls) >= 3
+    runtime.send_message.assert_awaited_once()
+
+
+async def test_typing_disabled_and_denied(runtime):
+    runtime.client.set_typing = AsyncMock()
+    with patch(TARGET, return_value=("ok", "session")):
+        runtime.assist.handle(MESSAGE)
+        await drain(runtime)
+    runtime.assist.settings = {**ASSIST, "typing_indicator": True}
+    assert not runtime.assist.handle(replace(MESSAGE, timestamp=1001, text="hello"))
+    runtime.client.set_typing.assert_not_awaited()
+
+
+async def test_typing_failures_do_not_break_assist(runtime):
+    runtime.assist.settings = {**ASSIST, "typing_indicator": True}
+    runtime.client.set_typing = AsyncMock(side_effect=ValueError("SECRET"))
+    with patch(TARGET, return_value=("ok", "session")) as run:
+        runtime.assist.handle(MESSAGE)
+        await drain(runtime)
+    run.assert_awaited_once()
+    runtime.send_message.assert_awaited_once_with(["alice"], "ok")
+    assert runtime.assist.failed == 0
+    assert runtime.client.set_typing.await_count == 2
+
+
+async def test_typing_cleanup_on_unload(runtime, hass):
+    runtime.assist.settings = {**ASSIST, "typing_indicator": True}
+    runtime.client.set_typing = AsyncMock()
+    started = asyncio.Event()
+
+    async def pipeline(*args, **kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    with patch(TARGET, side_effect=pipeline):
+        runtime.assist.handle(MESSAGE)
+        await started.wait()
+        await hass.config_entries.async_unload(runtime.entry.entry_id)
+    assert [call.args[2] for call in runtime.client.set_typing.await_args_list] == [
+        True,
+        False,
+    ]
+    runtime.send_message.assert_not_awaited()
+
+
+async def test_typing_deadline_does_not_block_reply(runtime):
+    runtime.assist.settings = {**ASSIST, "typing_indicator": True}
+
+    async def blocked(*args):
+        await asyncio.Event().wait()
+
+    runtime.client.set_typing = AsyncMock(side_effect=blocked)
+    with (
+        patch(TARGET, return_value=("ok", "session")),
+        patch(
+            "custom_components.signal_messenger_rest.typing_indicator.REQUEST_TIMEOUT",
+            0.01,
+        ),
+    ):
+        runtime.assist.handle(MESSAGE)
+        await drain(runtime)
+    runtime.send_message.assert_awaited_once_with(["alice"], "ok")
+    assert runtime.assist.completed == 1
+
+
+@pytest.mark.parametrize("failure", ["pipeline", "reply"])
+async def test_typing_stops_on_processing_or_reply_failure(runtime, failure):
+    runtime.assist.settings = {**ASSIST, "typing_indicator": True}
+    runtime.client.set_typing = AsyncMock()
+    if failure == "reply":
+        runtime.send_message.side_effect = ValueError("SECRET")
+    with patch(
+        TARGET,
+        side_effect=ValueError("SECRET") if failure == "pipeline" else None,
+        return_value=("ok", "session"),
+    ):
+        runtime.assist.handle(MESSAGE)
+        await drain(runtime)
+    assert runtime.assist.failed == 1
+    assert runtime.client.set_typing.await_args.args == (
+        MESSAGE.account,
+        "alice",
+        False,
+    )

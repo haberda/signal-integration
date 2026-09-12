@@ -249,6 +249,16 @@ class SignalClient:
             )
         return result
 
+    async def set_typing(self, account: str, recipient: str, active: bool) -> None:
+        """Start/refresh or stop typing in a direct or group conversation."""
+        async with self.lock:
+            await self.request(
+                "PUT" if active else "DELETE",
+                f"v1/typing-indicator/{quote(account, safe='')}",
+                data={"recipient": recipient},
+                request_timeout=2,
+            )
+
     async def send_read_receipt(
         self, account: str, recipient: str, timestamp: int
     ) -> None:
