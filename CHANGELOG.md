@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Guide setup through existing-account selection or in-dialog QR linking, including empty backends and account-list refresh.
+- Reuse QR credentials during a linking attempt, hide expired codes, and require explicit regeneration.
+- Offer Note to self during destination setup before contacts synchronize.
+- Add an account overview and QR linking in options without switching the entry's bound account.
+- List linked devices with timestamps and provide confirmed addition/removal, subject to backend account-role permissions.
+- Keep provisioning credentials out of saved entries and avoid automatic mutation retries.
+
 ## 0.3.2
 
 - Add an optional notification-destination checkbox when creating a group; confirmation saves the returned group ID and reloads notification entities.

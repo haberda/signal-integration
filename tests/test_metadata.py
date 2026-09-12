@@ -19,7 +19,7 @@ def test_metadata():
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == COMPONENT.name
-    assert manifest["version"] == "0.3.2"
+    assert manifest["version"] == "0.4.0"
     assert hacs["homeassistant"] == "2026.9.1"
     assert json.loads((COMPONENT / "strings.json").read_text()) == json.loads(
         (COMPONENT / "translations/en.json").read_text()
@@ -91,3 +91,8 @@ async def test_options_translations_loaded_by_home_assistant(hass):
     )
     assert translations[prefix + "group_create.data.name"] == "Group name"
     assert translations[prefix + "group_confirm.data.confirm"] == "Apply this change"
+    assert translations[prefix + "link_scan.data.qr_code"] == "Signal linking code"
+    assert (
+        translations[prefix + "device_confirm.data.confirm"]
+        == "Apply this device change"
+    )

@@ -9,7 +9,7 @@ Configure accounts and notification destinations in the UI, send messages and at
 ## Requirements and installation
 
 - Home Assistant **2026.9.1 or newer**.
-- A running Signal REST API with an account already registered or linked. Account registration and QR linking remain in the backend.
+- A running Signal REST API. Select an existing account or link your Signal phone through the guided QR flow. SMS/voice registration, CAPTCHA and PIN handling remain in the backend.
 - An API URL reachable **from Home Assistant**. On HAOS, `localhost` refers to the HA container, not the add-on. Use its reachable hostname or host IP and port.
 
 For HACS, add the public GitHub mirror of this repository under **HACS → Custom repositories**, select **Integration**, download **Signal Messenger REST**, and restart Home Assistant. Then open **Settings → Devices & services → Add integration → Signal Messenger REST**.
@@ -21,8 +21,8 @@ For local testing before publication, copy `custom_components/signal_messenger_r
 ## UI setup
 
 1. Select a detected running Signal add-on, or enter the backend URL manually. Path prefixes are supported. Optional username/password fields are for an HTTP Basic-auth reverse proxy, not a Signal account password. TLS certificate verification defaults to on.
-2. Choose a linked account.
-3. Select contacts/groups or type recipient numbers, UUIDs, usernames, or REST `group.` IDs manually. At least one notification destination is required. You can rename the resulting entities in Home Assistant.
+2. Choose an existing account, or select **Link a phone account using a QR code**. Name the backend device, scan the displayed code in Signal’s **Settings → Linked devices**, approve on the phone, and check for the account before selecting it.
+3. Select contacts/groups or type recipient numbers, UUIDs, usernames, or REST `group.` IDs manually. At least one notification destination is required; **Note to self** is available even before contacts have synchronized. You can rename the resulting entities in Home Assistant.
 4. Enable receiving if needed, and select allowed contacts/groups by name or enter sender numbers/UUIDs manually. An empty list allows **no incoming message events**. Group messages require both an allowed sender and an allowed group ID.
 5. Optionally select a test destination before submitting. This sends one fixed test message to that destination only. The default sends nothing. A failed or uncertain test leaves settings unsaved and resets the test selection; saving again does not automatically resend.
 
@@ -38,6 +38,24 @@ On Home Assistant OS/Supervised, setup detects these running add-ons through Sup
 | Edge | `c5ecc243_signal_messenger` | `http://c5ecc243-signal-messenger:8080` |
 
 Setup uses the hostname reported by Supervisor and the container's port 8080, independently of host port mappings. If both are running, choose one. Stopped add-ons are ignored; setup does not start them. Manual connection remains available, including when Supervisor data is unavailable or the internal connection fails. Standalone Home Assistant installations use the manual URL form.
+
+### Guided account linking and devices
+
+QR linking uses the backend's `GET /v1/qrcodelink/raw?device_name=...` endpoint, reviewed against REST API 0.100. Home Assistant renders the returned Signal URI using its native QR selector. The backend owns the Signal handshake; no separate browser connection to the add-on or publicly hosted image is needed. Connection credentials, proxy path prefixes and TLS settings apply to these requests.
+
+An active linking attempt reuses its QR code when the form is redisplayed. Select **I scanned the code — check for my account** to refresh account discovery; this does not create another handshake. The QR display expires after five minutes (Signal may expire the handshake earlier). **Request a new QR code** returns to the device-name form and starts a new attempt only when submitted. Closing the dialog cannot cancel a handshake already started by the backend. If you relinked an account already present on the backend, complete linking on the phone, then use **Choose an existing account**.
+
+QR credentials are held only in the active flow; they are not stored in config entries, diagnostics, or files. If the raw linking endpoint is unavailable, link in the backend and use **Refresh account list** during setup. Registration codes, CAPTCHA and PINs are not collected by this integration.
+
+Open **Configure → Accounts and linked devices** to view the current entry's account and all accounts available on its backend. You can link another phone account there, but doing so does not switch the current entry. Add a separate integration entry to configure the other account. Duplicate backend/account entries are rejected.
+
+Under **View and manage linked devices**, you can view device names, IDs, creation times and last-seen times (UTC). Device administration depends on backend support and account role:
+
+- **Link another device** accepts a companion's Signal provisioning URI when the backend is the primary account. This differs from displaying a QR code to link the backend to your phone.
+- **Remove a linked device** excludes the primary device. Removing the backend's own companion device can disconnect this integration.
+- Both operations require confirmation. Failed or uncertain mutations are not retried automatically. Reopen the device list or check Signal on your phone before repeating them.
+
+A backend linked to your phone may reject device administration; in that case use Signal's **Linked devices** settings. Removing the Home Assistant integration itself never unlinks a Signal device or deletes backend account data.
 
 ### Group management
 
@@ -211,7 +229,7 @@ Duplicate suppression uses a bounded, in-memory cache. Restart/reload clears it,
 
 Signal messages are decrypted in the backend and then passed to HA. Diagnostic downloads omit account identifiers, connection URLs, credentials and message contents, but automation traces and event listeners can retain received content. The API endpoint is privileged: use a private network or a protected proxy. Removing the integration never unlinks or deletes the Signal account.
 
-Receipt actions, message editing/deletion, polls, and embedded QR onboarding remain outside version 0.3.0.
+Receipt actions, message editing/deletion, polls, and SMS/voice account registration remain outside version 0.4.0.
 
 ## Migration from the built-in integration
 
@@ -237,7 +255,7 @@ After verifying sending, remove the old YAML notifier. Before enabling receiving
 | Signal Messenger add-on | No live image tested; record version/digest during acceptance |
 | HACS installation / GitHub validation | Prepared; requires a public GitHub mirror |
 
-Before a public release, validate these cases on a linked test account: direct/group/self sending; a local and URL attachment; a quoted reply to direct/group messages; two identical incoming texts; a sender without a phone number; unauthorized sender/group filtering; backend restart; HA restart/reload; a backend mode change; account unlinking; send timeout and partial failure. Check add-on and standalone deployments independently. Verify production/edge discovery, both add-ons running, manual fallback, and group creation/settings/membership/admin/leave changes with a test group. Never send real messages from automated CI.
+Before a public release, validate these cases on a linked test account: direct/group/self sending; a local and URL attachment; a quoted reply to direct/group messages; two identical incoming texts; a sender without a phone number; unauthorized sender/group filtering; backend restart; HA restart/reload; a backend mode change; account unlinking; send timeout and partial failure. Check add-on and standalone deployments independently. Verify production/edge discovery, both add-ons running, manual fallback, and group creation/settings/membership/admin/leave changes with a test group. Validate QR scanning and approval, account discovery, QR expiry/replacement, multiple accounts, and device listing/addition/removal on both primary and companion backends. Never send real messages from automated CI.
 
 ### Receiving troubleshooting
 

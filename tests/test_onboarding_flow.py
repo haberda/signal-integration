@@ -231,3 +231,33 @@ async def test_device_list_failure(hass, entry):
         result = await open_accounts(hass, entry)
         result = await option(hass, result, {"next_step_id": "devices"})
         assert result["reason"] == "device_read_failed"
+
+
+async def test_cancel_link_does_not_restart_or_save(hass, api_mock):
+    with (
+        patch(f"{API}.accounts", new_callable=AsyncMock, return_value=[]),
+        patch(f"{API}.start_link", new_callable=AsyncMock, return_value=URI) as link,
+    ):
+        result = await begin_link(hass)
+        result = await submit(hass, result, {"device_name": "HA"})
+        hass.config_entries.flow.async_abort(result["flow_id"])
+        await hass.async_block_till_done()
+        assert hass.config_entries.async_entries(DOMAIN) == []
+        link.assert_awaited_once()
+
+
+async def test_account_overview_failure(hass, entry):
+    with patch(f"{API}.accounts", new_callable=AsyncMock, side_effect=CannotConnect):
+        result = await open_accounts(hass, entry)
+        assert result["reason"] == "account_read_failed"
+
+
+async def test_no_removable_devices(hass, entry):
+    with (
+        patch(f"{API}.accounts", new_callable=AsyncMock, return_value=[ACCOUNT]),
+        patch(f"{API}.devices", new_callable=AsyncMock, return_value=DEVICES[:1]),
+    ):
+        result = await open_accounts(hass, entry)
+        result = await option(hass, result, {"next_step_id": "devices"})
+        result = await option(hass, result, {"next_step_id": "device_remove"})
+        assert result["reason"] == "no_linked_devices"
