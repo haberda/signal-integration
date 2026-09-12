@@ -52,9 +52,11 @@ Enter member numbers in international format or use Signal UUIDs. The integratio
 
 Every mutation has a review and confirmation screen. Changes apply immediately to Signal; closing the dialog does not undo them. If a request fails or times out, the flow ends without retrying. Check Signal and backend logs before repeating an operation, because it may already have succeeded.
 
-After creation, reopen **Destinations and receiving** to select the group as a notification destination and optionally authorize incoming group events. Group management does not change notification entities or incoming allowlists. Leaving a group does not automatically remove its saved destination or permissions; remove those in settings if needed. Existing entity names can be renamed in Home Assistant.
+When creating a group, select **Add as notification destination** to create its notifier automatically after confirmation. This option defaults to off. Otherwise, reopen **Destinations and receiving** to select the group later. Incoming group events always require separate authorization; the checkbox does not change incoming allowlists. Leaving a group does not automatically remove its saved destination or permissions; remove those in settings if needed. Existing entity names can be renamed in Home Assistant.
 
-Group operations use the [upstream REST API group endpoints](https://github.com/bbernhard/signal-cli-rest-api/blob/0.100/api/api.go). Group avatars, joining via invite links, and approving pending join requests are not exposed in this release.
+The backend’s delete endpoint calls `quitGroup` in version 0.100, so the UI exposes this as **Leave group**. It does not delete the group for everyone.
+
+Group operations use the [upstream REST API group endpoints](https://github.com/bbernhard/signal-cli-rest-api/blob/0.100/src/api/api.go). Group avatars, joining via invite links, and approving pending join requests are not exposed in this release.
 
 ## Sending
 

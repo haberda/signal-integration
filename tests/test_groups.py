@@ -186,3 +186,63 @@ async def test_menu_labels_survive_missing_frontend_translations(hass, entry):
     }
     result = await submit(hass, result, {"next_step_id": "group_create"})
     assert result["step_id"] == "group_create"
+
+
+async def test_create_group_with_notifier(hass, entry, api_mock):
+    from homeassistant.helpers import entity_registry as er
+
+    previous = dict(entry.options)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    with patch(
+        f"{API}.change_group", new_callable=AsyncMock, return_value="group.new"
+    ) as change:
+        result = await open_groups(hass, entry)
+        result = await submit(hass, result, {"next_step_id": "group_create"})
+        result = await submit(
+            hass,
+            result,
+            {
+                "name": "New group",
+                "members": ["+12025550101"],
+                "add_notifier": True,
+            },
+        )
+        assert (
+            "Add as notification destination: Yes"
+            in result["description_placeholders"]["details"]
+        )
+        assert entry.options == previous
+        result = await submit(hass, result, {"confirm": True})
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+        assert "add_notifier" not in change.call_args.args[3]
+        assert entry.options["destinations"][:-1] == previous["destinations"]
+        assert entry.options["allowed_groups"] == previous["allowed_groups"]
+        assert entry.options["allowed_senders"] == previous["allowed_senders"]
+        destination = entry.options["destinations"][-1]
+        assert destination["recipient"] == "group.new"
+        registry = er.async_get(hass)
+        entity_id = registry.async_get_entity_id(
+            "notify", entry.domain, f"{entry.entry_id}_{destination['id']}"
+        )
+        assert entity_id is not None
+        assert hass.states.get(entity_id) is not None
+        assert registry.async_get(entity_id).original_name == "New group"
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_create_returns_valid_group_id():
+    client = SignalClient(None, "http://signal.test")
+    with patch.object(
+        client, "request", new_callable=AsyncMock, return_value={"id": "group.new"}
+    ):
+        assert (
+            await client.change_group("+123", "create", None, {"name": "New"})
+            == "group.new"
+        )
+    with patch.object(
+        client, "request", new_callable=AsyncMock, return_value={"id": ""}
+    ):
+        with pytest.raises(InvalidResponse):
+            await client.change_group("+123", "create", None, {"name": "New"})

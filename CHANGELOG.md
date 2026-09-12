@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+- Add an optional notification-destination checkbox when creating a group; confirmation saves the returned group ID and reloads notification entities.
+- Preserve existing destinations and incoming permissions.
+- Clarify that the supported backend's delete endpoint leaves the group rather than deleting it for everyone.
+
 ## 0.3.1
 
 - Include explicit labels in both options menus so buttons remain visible when frontend translations are stale or unavailable.

@@ -276,8 +276,8 @@ class SignalClient:
 
     async def change_group(
         self, account: str, action: str, group_id: str | None, data: dict
-    ) -> None:
-        """Perform one explicit group operation, without retries."""
+    ) -> str | None:
+        """Perform one operation and return the new group ID for creation."""
         routes = {
             "create": ("POST", ""),
             "edit": ("PUT", ""),
@@ -296,6 +296,9 @@ class SignalClient:
         async with self.lock:
             result = await self.request(method, path + suffix, data=data)
         if action == "create" and (
-            not isinstance(result, dict) or not isinstance(result.get("id"), str)
+            not isinstance(result, dict)
+            or not isinstance(result.get("id"), str)
+            or not result["id"].startswith("group.")
         ):
             raise InvalidResponse("Invalid create group response")
+        return result["id"] if action == "create" else None

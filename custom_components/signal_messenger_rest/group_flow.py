@@ -1,5 +1,7 @@
 """Options steps for deliberate, confirmed Signal group changes."""
 
+from uuid import uuid4
+
 import voluptuous as vol
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -9,7 +11,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .api import SignalError
-from .const import CONF_ACCOUNT
+from .const import CONF_ACCOUNT, CONF_DESTINATIONS
 
 ACTIONS = [
     "edit",
@@ -167,6 +169,7 @@ class GroupFlowMixin:
         if user_input is not None:
             try:
                 payload = dict(user_input)
+                self._add_notifier = payload.pop("add_notifier", False)
                 if action in ("create", "edit"):
                     if not payload["name"].strip():
                         raise ValueError("Name required")
@@ -191,6 +194,8 @@ class GroupFlowMixin:
             except ValueError:
                 errors["base"] = "invalid_group_input"
         fields = {}
+        if action == "create":
+            fields[vol.Optional("add_notifier", default=False)] = BooleanSelector()
         if action in ("create", "edit"):
             fields[vol.Required("name", default=self._group.get("name", ""))] = (
                 TextSelector()
@@ -242,7 +247,7 @@ class GroupFlowMixin:
             if not user_input["confirm"]:
                 return await self.async_step_groups()
             try:
-                await self.group_client.change_group(
+                created_id = await self.group_client.change_group(
                     self.config_entry.data[CONF_ACCOUNT],
                     self._group_action,
                     self._group.get("id"),
@@ -252,13 +257,31 @@ class GroupFlowMixin:
                 # End the flow: a timeout can mean the operation was applied.
                 # Never present a submit button that silently repeats a mutation.
                 return self.async_abort(reason="group_change_failed")
+            if self._group_action == "create" and self._add_notifier:
+                options = dict(self.config_entry.options)
+                destinations = list(options.get(CONF_DESTINATIONS, []))
+                if not any(d["recipient"] == created_id for d in destinations):
+                    destinations.append(
+                        {
+                            "id": uuid4().hex,
+                            "recipient": created_id,
+                            "name": self._group_payload["name"],
+                        }
+                    )
+                options[CONF_DESTINATIONS] = destinations
+                return self.async_create_entry(data=options)
             return self.async_abort(reason="group_saved")
         return self.async_show_form(
             step_id="group_confirm",
             description_placeholders={
                 "action": self._group_action.replace("_", " "),
                 "group": self._group.get("name") or self._group_payload.get("name", ""),
-                "details": describe(self._group_payload),
+                "details": describe(self._group_payload)
+                + (
+                    "\n\nAdd as notification destination: Yes"
+                    if self._group_action == "create" and self._add_notifier
+                    else ""
+                ),
             },
             data_schema=vol.Schema(
                 {vol.Required("confirm", default=False): BooleanSelector()}

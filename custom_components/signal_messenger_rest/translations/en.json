@@ -98,7 +98,7 @@
       },
       "groups": {
         "title": "Manage Signal groups",
-        "description": "Changes apply directly to Signal. Creating a group does not enable notifications or authorize incoming messages; configure those separately under Destinations and receiving.",
+        "description": "Changes apply directly to Signal. When creating a group, you can also add it as a notification destination. Incoming messages still require separate authorization under Destinations and receiving.",
         "menu_options": {
           "group_create": "Create a group",
           "group_select": "Manage an existing group",
@@ -117,7 +117,8 @@
           "group_link": "Invite link state",
           "edit_group": "Who can edit the group",
           "add_members": "Who can add members",
-          "send_messages": "Who can send messages"
+          "send_messages": "Who can send messages",
+          "add_notifier": "Add as notification destination"
         }
       },
       "group_edit": {
