@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Discover running production and edge Signal add-ons and connect through Supervisor-reported internal DNS on port 8080.
+- Retain manual backend configuration and selection when multiple add-ons are running.
+- Add an options menu for notification settings and group management.
+- Create groups, view group details, edit names/descriptions/timers/invite links/permissions, manage members and administrators, and leave groups.
+- Require confirmation for group changes and avoid automatic retries after uncertain failures.
+- Preserve existing notification destination IDs and incoming permissions.
+
 ## 0.2.0
 
 - Send and remove reactions through dedicated actions.

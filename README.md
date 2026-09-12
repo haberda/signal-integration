@@ -20,13 +20,41 @@ For local testing before publication, copy `custom_components/signal_messenger_r
 
 ## UI setup
 
-1. Enter the backend URL. Path prefixes are supported. Optional username/password fields are for an HTTP Basic-auth reverse proxy, not a Signal account password. TLS certificate verification defaults to on.
+1. Select a detected running Signal add-on, or enter the backend URL manually. Path prefixes are supported. Optional username/password fields are for an HTTP Basic-auth reverse proxy, not a Signal account password. TLS certificate verification defaults to on.
 2. Choose a linked account.
 3. Select contacts/groups or type recipient numbers, UUIDs, usernames, or REST `group.` IDs manually. At least one notification destination is required. You can rename the resulting entities in Home Assistant.
 4. Enable receiving if needed, and select allowed contacts/groups by name or enter sender numbers/UUIDs manually. An empty list allows **no incoming message events**. Group messages require both an allowed sender and an allowed group ID.
 5. Optionally select a test destination before submitting. This sends one fixed test message to that destination only. The default sends nothing. A failed or uncertain test leaves settings unsaved and resets the test selection; saving again does not automatically resend.
 
-Use integration **Configure** to change destinations, receiving permissions and polling intervals. Use **Reconfigure** to change the URL or proxy credentials while retaining the same Signal account. A proxy authentication failure starts a credential recovery flow. Changing options reloads the integration.
+Use integration **Configure → Destinations and receiving** to change destinations, receiving permissions and polling intervals. Use **Reconfigure** to change the URL or proxy credentials while retaining the same Signal account. A proxy authentication failure starts a credential recovery flow. Changing options reloads the integration.
+
+### Add-on discovery
+
+On Home Assistant OS/Supervised, setup detects these running add-ons through Supervisor:
+
+| Repository | Add-on slug | Default internal URL |
+| --- | --- | --- |
+| Production | `1315902c_signal_messenger` | `http://1315902c-signal-messenger:8080` |
+| Edge | `c5ecc243_signal_messenger` | `http://c5ecc243-signal-messenger:8080` |
+
+Setup uses the hostname reported by Supervisor and the container's port 8080, independently of host port mappings. If both are running, choose one. Stopped add-ons are ignored; setup does not start them. Manual connection remains available, including when Supervisor data is unavailable or the internal connection fails. Standalone Home Assistant installations use the manual URL form.
+
+### Group management
+
+Open **Configure → Manage Signal groups** to create a group or manage an existing one. You can:
+
+- Create a named group with initial members and a description.
+- View current membership, administrators, pending invitations/requests, and the invite link.
+- Change the name, description, disappearing-message timer, invite-link state, and editing/member/message permissions.
+- Add or remove members, promote or demote administrators, and leave a group.
+
+Enter member numbers in international format or use Signal UUIDs. The integration account needs the relevant Signal permissions; the backend may reject unsupported operations. Timer values are seconds, with 0 disabling disappearing messages. An omitted timer or an **unchanged** permission/link selection preserves that setting, since the list API does not report all current settings.
+
+Every mutation has a review and confirmation screen. Changes apply immediately to Signal; closing the dialog does not undo them. If a request fails or times out, the flow ends without retrying. Check Signal and backend logs before repeating an operation, because it may already have succeeded.
+
+After creation, reopen **Destinations and receiving** to select the group as a notification destination and optionally authorize incoming group events. Group management does not change notification entities or incoming allowlists. Leaving a group does not automatically remove its saved destination or permissions; remove those in settings if needed. Existing entity names can be renamed in Home Assistant.
+
+Group operations use the [upstream REST API group endpoints](https://github.com/bbernhard/signal-cli-rest-api/blob/0.100/api/api.go). Group avatars, joining via invite links, and approving pending join requests are not exposed in this release.
 
 ## Sending
 
@@ -181,7 +209,7 @@ Duplicate suppression uses a bounded, in-memory cache. Restart/reload clears it,
 
 Signal messages are decrypted in the backend and then passed to HA. Diagnostic downloads omit account identifiers, connection URLs, credentials and message contents, but automation traces and event listeners can retain received content. The API endpoint is privileged: use a private network or a protected proxy. Removing the integration never unlinks or deletes the Signal account.
 
-Receipt actions, message editing/deletion, group administration, polls, and embedded QR onboarding remain outside version 0.2.0.
+Receipt actions, message editing/deletion, polls, and embedded QR onboarding remain outside version 0.3.0.
 
 ## Migration from the built-in integration
 
@@ -207,7 +235,7 @@ After verifying sending, remove the old YAML notifier. Before enabling receiving
 | Signal Messenger add-on | No live image tested; record version/digest during acceptance |
 | HACS installation / GitHub validation | Prepared; requires a public GitHub mirror |
 
-Before a public release, validate these cases on a linked test account: direct/group/self sending; a local and URL attachment; a quoted reply to direct/group messages; two identical incoming texts; a sender without a phone number; unauthorized sender/group filtering; backend restart; HA restart/reload; a backend mode change; account unlinking; send timeout and partial failure. Check add-on and standalone deployments independently. Never send real messages from automated CI.
+Before a public release, validate these cases on a linked test account: direct/group/self sending; a local and URL attachment; a quoted reply to direct/group messages; two identical incoming texts; a sender without a phone number; unauthorized sender/group filtering; backend restart; HA restart/reload; a backend mode change; account unlinking; send timeout and partial failure. Check add-on and standalone deployments independently. Verify production/edge discovery, both add-ons running, manual fallback, and group creation/settings/membership/admin/leave changes with a test group. Never send real messages from automated CI.
 
 ### Receiving troubleshooting
 

@@ -1,6 +1,9 @@
 {
   "domain": "signal_messenger_rest",
   "name": "Signal Messenger REST",
+  "after_dependencies": [
+    "hassio"
+  ],
   "codeowners": [
     "@haberda"
   ],
@@ -10,8 +13,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://git.haber.haus/haberda/signal-integration/issues",
   "requirements": [],
-  "version": "0.2.0",
-  "after_dependencies": [
-    "hassio"
-  ]
+  "version": "0.3.0"
 }

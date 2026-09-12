@@ -285,3 +285,35 @@ async def test_addon_manual_and_stopped(hass, api_mock):
             result["flow_id"], {"addon": "manual"}
         )
         assert result["step_id"] == "user"
+
+
+async def test_both_addons_and_failed_internal_connection(hass, api_mock):
+    with patch(
+        "custom_components.signal_messenger_rest.addon.get_addons_info",
+        return_value={
+            "1315902c_signal_messenger": {"state": "started"},
+            "c5ecc243_signal_messenger": {"state": "started"},
+        },
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        selector = next(iter(result["data_schema"].schema.values()))
+        assert len(selector.config["options"]) == 3
+        api_mock[0].side_effect = CannotConnect()
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"addon": "http://1315902c-signal-messenger:8080"}
+        )
+        assert result["step_id"] == "user"
+        assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_stopped_addon_uses_manual_setup(hass, api_mock):
+    with patch(
+        "custom_components.signal_messenger_rest.addon.get_addons_info",
+        return_value={"1315902c_signal_messenger": {"state": "stopped"}},
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        assert result["step_id"] == "user"
