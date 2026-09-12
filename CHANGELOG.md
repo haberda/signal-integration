@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2
+
+- Explain busy, oversized and expired Assist requests with quoted, rate-limited replies.
+- Bound feedback work separately from pipeline work and cancel both on unload; never retry failed notices.
+- Add content-free diagnostic sensors for Assist status, queue length, completed runs, errors, rejected requests, suppressed feedback and last error.
+- Include rejection reason counters in downloaded diagnostics.
+
 ## 0.5.1
 
 - Honor disabled local handling by using the selected agent without sentence-trigger interception.
