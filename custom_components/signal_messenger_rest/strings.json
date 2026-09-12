@@ -265,10 +265,12 @@
           "prefix": "Command prefix",
           "conversation_timeout": "Conversation idle timeout",
           "publish_events": "Also publish handled messages as events",
-          "typing_indicator": "Show typing while Assist responds"
+          "typing_indicator": "Show typing while Assist responds",
+          "quote_context": "Include quoted text as Assist context"
         },
         "data_description": {
-          "typing_indicator": "Attempt to show a typing indicator in the conversation while Assist processes a request and sends its reply."
+          "typing_indicator": "Attempt to show a typing indicator in the conversation while Assist processes a request and sends its reply.",
+          "quote_context": "Send up to 2,000 characters of the quoted message to the selected Assist agent, including its cloud provider if configured. Your new message still requires normal Assist authorization and activation."
         }
       },
       "destination_name": {

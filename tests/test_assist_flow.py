@@ -73,7 +73,11 @@ async def test_save_assist_and_other_options_preserve_each_other(
         result["flow_id"], {"next_step_id": "settings"}
     )
     await hass.config_entries.options.async_configure(result["flow_id"], SETTINGS)
-    assert entry.options["assist"] == {**ASSIST, "typing_indicator": typing}
+    assert entry.options["assist"] == {
+        **ASSIST,
+        "typing_indicator": typing,
+        "quote_context": False,
+    }
 
 
 async def test_disable_when_pipeline_is_unavailable(hass, entry, api_mock):
@@ -183,3 +187,18 @@ async def test_destination_pipeline_validation(hass, entry, api_mock):
             result["flow_id"], {"destination": "   ", "pipeline": ""}
         )
         assert result["errors"]["base"] == "assist_destination_required"
+
+
+async def test_quote_context_opt_in_persists(hass, entry, api_mock):
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "receive": True}
+    )
+    with patch(CHOICES, return_value={"test-pipeline": "Home"}):
+        result = await open_assist(hass, entry)
+        await hass.config_entries.options.async_configure(
+            result["flow_id"], {**ASSIST, "quote_context": True}
+        )
+        assert entry.options["assist"]["quote_context"] is True
+        result = await open_assist(hass, entry)
+        schema = result["data_schema"]
+        assert schema({**ASSIST})["quote_context"] is True

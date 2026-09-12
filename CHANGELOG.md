@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+- Add an Assist troubleshooting screen with pipeline/agent information and safe clearing of conversation references.
+- Support up to 64 destination-specific pipeline assignments without changing authorization or silently falling back from unavailable agents.
+- Add opt-in quoted message context, limited to 2,000 characters and explicitly disclosed as input to the selected agent/provider.
+- Keep new-message permissions, activation and reset behavior unchanged when quoted context is enabled.
+
 ## 0.5.4
 
 - Add an optional typing indicator while Assist processes and replies in direct or group chats.

@@ -136,6 +136,9 @@ class AssistFlowMixin:
                         )
                     ),
                     vol.Optional(
+                        "quote_context", default=settings.get("quote_context", False)
+                    ): BooleanSelector(),
+                    vol.Optional(
                         "typing_indicator",
                         default=settings.get("typing_indicator", False),
                     ): BooleanSelector(),
