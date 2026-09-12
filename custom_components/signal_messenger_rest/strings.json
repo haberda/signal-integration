@@ -116,7 +116,8 @@
         "menu_options": {
           "settings": "Destinations and receiving",
           "groups": "Manage Signal groups",
-          "accounts": "Accounts and linked devices"
+          "accounts": "Accounts and linked devices",
+          "assist": "Assist conversations"
         }
       },
       "groups": {
@@ -232,6 +233,20 @@
         "data": {
           "confirm": "Apply this device change"
         }
+      },
+      "assist": {
+        "title": "Assist conversations",
+        "description": "Enable receiving under Destinations and receiving first, and configure an assistant in Home Assistant. These allowlists separately authorize people to use that assistant and its exposed controls. Empty sender lists deny all Assist access. Groups require both an allowed sender and group, and always require the prefix. Replies go to the originating chat, so group members can see them.\n\nUse “/assist /reset” (or your chosen prefix) to start a new conversation. The session timeout is an idle limit; the conversation agent may retain context for less time. By default, handled requests do not also produce message events. Enable event publishing only if your automations should also see them; the normal event allowlists still apply.",
+        "data": {
+          "enabled": "Enable Assist conversations",
+          "pipeline": "Assist pipeline",
+          "senders": "Senders allowed to use Assist",
+          "groups": "Groups allowed to use Assist",
+          "direct_mode": "Activation in direct chats",
+          "prefix": "Command prefix",
+          "conversation_timeout": "Conversation idle timeout",
+          "publish_events": "Also publish handled messages as events"
+        }
       }
     },
     "error": {
@@ -246,7 +261,11 @@
       "link_pending": "No new account found yet. Complete linking on your phone and check again.",
       "link_expired": "The QR display has expired. You can still check for a completed link or explicitly request a new code.",
       "invalid_link_uri": "Enter a Signal device-link URI containing its UUID and public key.",
-      "device_missing": "The device is no longer listed. Choose another device."
+      "device_missing": "The device is no longer listed. Choose another device.",
+      "assist_receive_required": "Enable receiving under Destinations and receiving before enabling Assist.",
+      "assist_pipeline_required": "Select an available Assist pipeline. Configure an assistant in Home Assistant first.",
+      "assist_senders_required": "Explicitly allow at least one sender to use Assist.",
+      "assist_invalid_prefix": "Use a prefix beginning with /, containing no whitespace, and no more than 32 characters."
     },
     "abort": {
       "group_saved": "Group change sent successfully. Reopen options to view current group details or select notification destinations. Incoming permissions are unchanged.",

@@ -30,6 +30,7 @@ from .api import (
     UnsupportedServer,
     normalize_url,
 )
+from .assist_flow import AssistFlowMixin
 from .const import (
     CONF_ACCOUNT,
     CONF_DESTINATIONS,
@@ -147,6 +148,7 @@ def make_options(data: dict, choices: dict, previous: dict | None = None) -> dic
         raise ValueError("Select at least one destination")
     data = {k: v for k, v in data.items() if k != "test_recipient"}
     return {
+        **(previous or {}),
         **data,
         CONF_DESTINATIONS: destinations,
         CONF_SENDERS: list(
@@ -370,7 +372,9 @@ class SignalConfigFlow(LinkFlowMixin, ConfigFlow, domain=DOMAIN):
         )
 
 
-class SignalOptionsFlow(LinkFlowMixin, DeviceFlowMixin, GroupFlowMixin, OptionsFlow):
+class SignalOptionsFlow(
+    AssistFlowMixin, LinkFlowMixin, DeviceFlowMixin, GroupFlowMixin, OptionsFlow
+):
     def __init__(self):
         self._choices = {}
 
@@ -397,6 +401,7 @@ class SignalOptionsFlow(LinkFlowMixin, DeviceFlowMixin, GroupFlowMixin, OptionsF
                 "settings": "Destinations and receiving",
                 "groups": "Manage Signal groups",
                 "accounts": "Accounts and linked devices",
+                "assist": "Assist conversations",
             },
         )
 

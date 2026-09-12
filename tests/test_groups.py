@@ -178,6 +178,7 @@ async def test_menu_labels_survive_missing_frontend_translations(hass, entry):
         "settings": "Destinations and receiving",
         "groups": "Manage Signal groups",
         "accounts": "Accounts and linked devices",
+        "assist": "Assist conversations",
     }
     result = await submit(hass, result, {"next_step_id": "groups"})
     assert result["menu_options"] == {
