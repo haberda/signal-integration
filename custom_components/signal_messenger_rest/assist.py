@@ -124,6 +124,7 @@ class SignalAssist:
         self.queue = asyncio.Queue(maxsize=MAX_PENDING)
         self.task = None
         self.sessions = OrderedDict()
+        self.session_generation = 0
         self.seen = OrderedDict()
         self.closed = False
         self.completed = 0
@@ -203,6 +204,12 @@ class SignalAssist:
         except Exception:
             return "pipeline_unavailable"
         return "processing" if self.active else "idle"
+
+    def clear_sessions(self):
+        """Forget references without retrying or cancelling an active command."""
+        self.session_generation += 1
+        self.sessions.clear()
+        self._updated()
 
     def _updated(self):
         self.coordinator.async_update_listeners()
@@ -284,6 +291,7 @@ class SignalAssist:
                 self._updated()
 
     async def _process(self, message, text):
+        generation = self.session_generation
         key = (message.conversation_id, message.sender)
         session = self.sessions.pop(key, None)
         conversation_id = None
@@ -324,7 +332,8 @@ class SignalAssist:
                 else:
                     self.completed += 1
                     self._updated()
-                    self.sessions[key] = (conversation_id, monotonic(), signature)
+                    if generation == self.session_generation:
+                        self.sessions[key] = (conversation_id, monotonic(), signature)
                     if len(self.sessions) > MAX_SESSIONS:
                         self.sessions.popitem(last=False)
             fields = {}

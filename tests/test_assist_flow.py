@@ -86,3 +86,41 @@ async def test_disable_when_pipeline_is_unavailable(hass, entry, api_mock):
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options["assist"]["enabled"] is False
+
+
+async def test_troubleshooting_unloaded_and_cancel_clear(hass, entry):
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "assist_status"}
+    )
+    assert result["description_placeholders"]["status"] == "Not loaded"
+    assert result["description_placeholders"]["agent"] == "Unavailable"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "assist_clear"}
+    )
+    assert result["step_id"] == "assist_clear"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"confirm": False}
+    )
+    assert result["step_id"] == "assist_status"
+
+
+async def test_troubleshooting_clear_loaded_sessions(hass, entry, api_mock):
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    entry.runtime_data.assist.sessions["test"] = ("private-session", 1, None)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "assist_status"}
+    )
+    assert result["description_placeholders"]["sessions"] == "1"
+    assert "private-session" not in str(result["description_placeholders"])
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "assist_clear"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"confirm": True}
+    )
+    assert result["description_placeholders"]["sessions"] == "0"
+    assert entry.runtime_data.assist.session_generation == 1
+    await hass.config_entries.async_unload(entry.entry_id)

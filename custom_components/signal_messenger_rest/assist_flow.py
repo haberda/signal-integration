@@ -146,3 +146,76 @@ class AssistFlowMixin:
             ),
             errors=errors,
         )
+
+    async def async_step_assist_status(self, user_input=None):
+        entry = self.config_entry
+        runtime = getattr(entry, "runtime_data", None)
+        saved = entry.options.get("assist", {})
+        settings = runtime.assist.settings if runtime else saved
+        pipeline_label, agent_label, local = describe_pipeline(
+            self.hass, settings.get("pipeline")
+        )
+        return self.async_show_menu(
+            step_id="assist_status",
+            description_placeholders={
+                "status": runtime.assist.status if runtime else "Not loaded",
+                "pipeline": pipeline_label,
+                "agent": agent_label,
+                "local": local,
+                "activation": (
+                    "All direct text messages"
+                    if settings.get("direct_mode") == "all"
+                    else "Require the command prefix"
+                ),
+                "prefix": settings.get("prefix", "/assist"),
+                "api": str(bool(runtime and runtime.last_update_success)),
+                "receiver": str(bool(runtime and runtime.connected)),
+                "matches": str(settings == saved),
+                "sessions": str(len(runtime.assist.sessions) if runtime else 0),
+                "queued": str(runtime.assist.queue.qsize() if runtime else 0),
+                "error": runtime.assist.last_error if runtime else "none",
+            },
+            menu_options={
+                "assist_status": "Refresh status",
+                "assist_clear": "Clear conversation sessions",
+                "assist": "Edit Assist settings",
+                "init": "Back to options",
+            },
+        )
+
+    async def async_step_assist_clear(self, user_input=None):
+        if user_input is not None:
+            runtime = getattr(self.config_entry, "runtime_data", None)
+            if user_input.get("confirm") and runtime:
+                runtime.assist.clear_sessions()
+            return await self.async_step_assist_status()
+        return self.async_show_form(
+            step_id="assist_clear",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("confirm", default=False): BooleanSelector(),
+                }
+            ),
+        )
+
+
+def describe_pipeline(hass, pipeline_id):
+    """Names are shown only in the configuration UI, never diagnostics."""
+    if not pipeline_id or "assist_pipeline" not in hass.config.components:
+        return "Unavailable", "Unavailable", "Unknown"
+    from homeassistant.components.assist_pipeline.pipeline import (
+        PipelineError,
+        async_get_pipeline,
+    )
+
+    try:
+        pipeline = async_get_pipeline(hass, pipeline_id)
+    except KeyError, ValueError, PipelineError:
+        return "Unavailable", "Unavailable", "Unknown"
+    agent = pipeline.conversation_engine or "conversation.home_assistant"
+    state = hass.states.get(agent)
+    return (
+        pipeline.name,
+        state.name if state else agent,
+        str(pipeline.prefer_local_intents),
+    )

@@ -560,3 +560,25 @@ async def test_typing_stops_on_processing_or_reply_failure(runtime, failure):
         "alice",
         False,
     )
+
+
+async def test_clear_sessions_during_run_does_not_restore_old_context(runtime):
+    started = asyncio.Event()
+    gate = asyncio.Event()
+
+    async def pipeline(*args, **kwargs):
+        started.set()
+        await gate.wait()
+        return "ok", "old-session"
+
+    with patch(TARGET, side_effect=pipeline):
+        runtime.assist.handle(MESSAGE)
+        await started.wait()
+        runtime.assist.clear_sessions()
+        gate.set()
+        await drain(runtime)
+    assert not runtime.assist.sessions
+    with patch(TARGET, return_value=("ok", "new-session")) as run:
+        runtime.assist.handle(replace(MESSAGE, timestamp=1001))
+        await drain(runtime)
+    assert run.await_args.args[3] is None

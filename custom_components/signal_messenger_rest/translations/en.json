@@ -134,7 +134,8 @@
           "settings": "Destinations and receiving",
           "groups": "Manage Signal groups",
           "accounts": "Accounts and linked devices",
-          "assist": "Assist conversations"
+          "assist": "Assist conversations",
+          "assist_status": "Assist troubleshooting"
         }
       },
       "groups": {
@@ -274,6 +275,23 @@
         "description": "Choose an optional name for {recipient}. Leave blank to use the contact/group name or recipient identifier. The name is included in the notify entity’s friendly name and its initial entity ID. Existing entity IDs and names overridden in Home Assistant are preserved.",
         "data": {
           "name": "Destination name"
+        }
+      },
+      "assist_status": {
+        "title": "Assist troubleshooting",
+        "description": "Status: {status}\n\nDefault pipeline: {pipeline}\n\nAgent: {agent}\n\nPrefer local commands: {local}\n\nDirect activation: {activation}\n\nPrefix: {prefix}\n\nAPI connected: {api}\n\nReceiver connected: {receiver}\n\nRunning settings match saved settings: {matches}\n\nRetained sessions (may include idle-expired references): {sessions}\n\nQueued requests: {queued}\n\nLast error: {error}",
+        "menu_options": {
+          "assist_status": "Refresh status",
+          "assist_clear": "Clear conversation sessions",
+          "assist": "Edit Assist settings",
+          "init": "Back to options"
+        }
+      },
+      "assist_clear": {
+        "title": "Clear Assist conversations",
+        "description": "Forget all conversation references for this Signal account. Active commands may still finish, but their context will not be retained. Queued requests start with fresh context. This does not delete conversation history held by Home Assistant or an agent/provider.",
+        "data": {
+          "confirm": "Clear all conversation sessions"
         }
       }
     },

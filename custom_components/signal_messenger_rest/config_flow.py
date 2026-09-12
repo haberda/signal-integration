@@ -454,6 +454,7 @@ class SignalOptionsFlow(
                 "groups": "Manage Signal groups",
                 "accounts": "Accounts and linked devices",
                 "assist": "Assist conversations",
+                "assist_status": "Assist troubleshooting",
             },
         )
 
