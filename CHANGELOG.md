@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0
+
+- Add direct text conversations with a selected Assist pipeline, without user-created automations.
+- Configure separate Assist allowlists, direct-chat activation, a mandatory group prefix, idle timeout and optional event publishing.
+- Isolate conversation references per account/chat/sender and support a reset command.
+- Bound queued work, input/output sizes, session references and execution time; cancel work on unload and never automatically retry uncertain operations.
+- Reply to the originating chat and quote group commands.
+- Preserve Assist options when updating notification destinations and add content-free Assist diagnostics.
+- Validate text-only operation against Home Assistant's real Assist pipeline.
+
 ## 0.4.0
 
 - Guide setup through existing-account selection or in-dialog QR linking, including empty backends and account-list refresh.

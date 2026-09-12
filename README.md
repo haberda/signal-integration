@@ -76,6 +76,30 @@ The backend’s delete endpoint calls `quitGroup` in version 0.100, so the UI ex
 
 Group operations use the [upstream REST API group endpoints](https://github.com/bbernhard/signal-cli-rest-api/blob/0.100/src/api/api.go). Group avatars, joining via invite links, and approving pending join requests are not exposed in this release.
 
+## Assist conversations
+
+Signal can send text directly to an existing Home Assistant Assist pipeline and return its response to the originating chat. No automation is required. Configure an assistant in Home Assistant first; the integration uses the selected pipeline's conversation agent and language, running only the intent stage.
+
+1. Under **Configure → Destinations and receiving**, enable receiving. Keep the existing polling-mode guidance in mind.
+2. Open **Configure → Assist conversations**, enable Assist, and select your pipeline.
+3. Explicitly select allowed sender phone numbers/UUIDs. For group chats, also select the allowed group.
+4. Choose direct-chat activation: require a prefix (default `/assist`) or process all direct text messages. Groups always require the prefix.
+5. Set an idle timeout and save. For example, send `/assist turn on the kitchen lights`.
+
+Assist permissions are separate from message-event permissions. An empty Assist sender list denies all Assist access, and a group alone never authorizes every member. Authorized senders can use the selected agent's configured capabilities and exposed controls; Signal identities are not mapped to individual Home Assistant users.
+
+Replies go to the originating direct or group chat; group replies quote the original command and are visible to that group's members. Voice notes and attachments are not processed by this feature. Replies are text only.
+
+Conversation context is isolated by integration account, chat and sender. Follow-up requests reuse a Home Assistant conversation ID when available. After the configured idle interval (30–300 seconds), the next request starts fresh; an agent may retain context for less time. Send `/assist /reset` to start a new conversation immediately, replacing `/assist` if you chose another prefix. In all-direct-messages mode, `/reset` alone also works. Reset starts a new conversation; it does not delete Home Assistant's existing traces or agent history.
+
+By default, requests handled by Assist are not also published as `signal_messenger_rest_message_received` events. This avoids duplicate replies from existing automations. **Also publish handled messages as events** enables that behavior, but the normal event sender/group permissions still apply. Ordinary messages and reactions retain their existing event behavior.
+
+Each account processes one Assist request at a time with at most 16 queued requests. Requests waiting longer than 60 seconds, oversized inputs (over 4,000 characters after the prefix), and excess requests are dropped without execution. Diagnostic counters report dropped and failed requests without exposing their contents. Replies are limited to 10,000 characters. Up to 64 conversation references are retained per account.
+
+A pipeline run has a 60-second timeout. Pipeline and reply failures are never retried automatically because an action or send may already have succeeded. Reload/unload/shutdown cancels pending work and clears the integration's conversation references. Duplicate suppression is in memory and does not guarantee replay protection across restarts.
+
+The integration does not log prompts or agent error details, but Home Assistant's Assist debug history, the selected agent/provider, and optionally automation traces can retain conversation content. Live acceptance testing should cover the selected local or cloud agent, exposed entity controls, group replies, follow-ups, and backend disconnects.
+
 ## Sending
 
 Each selected destination gets a modern notification entity:
@@ -229,7 +253,7 @@ Duplicate suppression uses a bounded, in-memory cache. Restart/reload clears it,
 
 Signal messages are decrypted in the backend and then passed to HA. Diagnostic downloads omit account identifiers, connection URLs, credentials and message contents, but automation traces and event listeners can retain received content. The API endpoint is privileged: use a private network or a protected proxy. Removing the integration never unlinks or deletes the Signal account.
 
-Receipt actions, message editing/deletion, polls, and SMS/voice account registration remain outside version 0.4.0.
+Receipt actions, message editing/deletion, polls, and SMS/voice account registration remain outside version 0.5.0.
 
 ## Migration from the built-in integration
 
@@ -267,6 +291,10 @@ Before a public release, validate these cases on a linked test account: direct/g
 | Some polling messages missing | Disable competing receive sensors, helper receivers and backend automatic receive schedules |
 | Text arrives but reaction does not acknowledge | React to the original alert, check exact emoji/author/conversation, and supply `account_author` if the account number is hidden |
 | Reminders stop after restart/reload | Expected: pending alerts are in memory and canceled on reload |
+| Assist does not respond | Enable receiving and Assist; check the separate Assist sender/group allowlists, prefix and selected pipeline |
+| Assist replies twice | Disable publishing handled Assist messages as events, or remove overlapping reply automations |
+| Assist drops requests | Check `assist_dropped`; input size, queue capacity and queue age are bounded |
+| Assist reports an uncertain failure | Inspect the resulting device state before repeating the command; it was not retried |
 
 The diagnostic `pending_alerts` count reports current waits without message contents or identities. Reaction fixtures were derived from the [signal-cli v0.14.5 JSON contract](https://github.com/AsamK/signal-cli/blob/v0.14.5/src/main/java/org/asamk/signal/json/JsonReaction.java) and are synthetic. Live validation should include phone-number-hidden accounts, direct/group reaction addition and removal, and acknowledgments arriving before a send response. No live backend is configured in this repository.
 

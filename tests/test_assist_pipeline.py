@@ -17,7 +17,12 @@ async def test_real_intent_pipeline(hass):
     from homeassistant.components.assist_pipeline.pipeline import async_get_pipelines
 
     assert await async_setup_component(hass, "homeassistant", {})
-    assert await async_setup_component(hass, "assist_pipeline", {})
+    with patch(
+        "homeassistant.components.ffmpeg.FFmpegManager.async_get_version",
+        new_callable=AsyncMock,
+        return_value=("test", 6),
+    ):
+        assert await async_setup_component(hass, "assist_pipeline", {})
     pipelines = async_get_pipelines(hass)
     assert pipelines
     with (
