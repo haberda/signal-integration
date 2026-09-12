@@ -29,7 +29,11 @@
           "allowed_groups": "Allowed group IDs",
           "poll_interval": "Polling interval",
           "test_recipient": "Optional test message destination",
-          "customize_names": "Customize destination names"
+          "customize_names": "Customize destination names",
+          "send_read_receipts": "Send read receipts"
+        },
+        "data_description": {
+          "send_read_receipts": "Tell senders when this integration accepts their messages for events or Assist. Requires receiving. Does not confirm an automation or Assist command succeeded."
         }
       },
       "reconfigure": {
@@ -117,7 +121,11 @@
           "allowed_groups": "Allowed group IDs",
           "poll_interval": "Polling interval",
           "test_recipient": "Optional test message destination",
-          "customize_names": "Customize destination names"
+          "customize_names": "Customize destination names",
+          "send_read_receipts": "Send read receipts"
+        },
+        "data_description": {
+          "send_read_receipts": "Tell senders when this integration accepts their messages for events or Assist. Requires receiving. Does not confirm an automation or Assist command succeeded."
         }
       },
       "init": {

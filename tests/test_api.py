@@ -228,3 +228,27 @@ async def test_group_http_contract(aiohttp_server):
         ("POST", "/proxy/v1/groups/+123", {"name": "New", "members": ["+456"]}),
         ("DELETE", "/proxy/v1/groups/+123/group.test/members", {"members": ["+456"]}),
     ]
+
+
+@pytest.mark.parametrize("status", [204, 400, 401])
+async def test_read_receipt_contract(aiohttp_server, status):
+    seen = []
+
+    async def handler(request):
+        seen.append(await request.json())
+        assert request.path == "/proxy/v1/receipts/+12025550100"
+        return web.Response(status=status)
+
+    app = web.Application()
+    app.router.add_post("/proxy/v1/receipts/{account}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/proxy/")))
+        if status == 204:
+            await client.send_read_receipt("+12025550100", "sender-uuid", 123)
+        else:
+            with pytest.raises(InvalidAuth if status == 401 else SignalError):
+                await client.send_read_receipt("+12025550100", "sender-uuid", 123)
+    assert seen == [
+        {"recipient": "sender-uuid", "receipt_type": "read", "timestamp": 123}
+    ]

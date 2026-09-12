@@ -36,6 +36,7 @@ from .const import (
     CONF_DESTINATIONS,
     CONF_GROUPS,
     CONF_INTERVAL,
+    CONF_READ_RECEIPTS,
     CONF_RECEIVE,
     CONF_SENDERS,
     DEFAULT_INTERVAL,
@@ -103,6 +104,9 @@ def options_schema(choices: dict[str, str], defaults: dict) -> vol.Schema:
             vol.Optional("customize_names", default=False): BooleanSelector(),
             vol.Required(
                 CONF_RECEIVE, default=defaults.get(CONF_RECEIVE, False)
+            ): BooleanSelector(),
+            vol.Optional(
+                CONF_READ_RECEIPTS, default=defaults.get(CONF_READ_RECEIPTS, False)
             ): BooleanSelector(),
             vol.Required(
                 CONF_SENDERS, default=defaults.get(CONF_SENDERS, [])

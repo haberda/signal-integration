@@ -107,9 +107,14 @@ async def test_options_preserve_ids_and_allow_manual(hass, api_mock):
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {**SETTINGS, "destinations": ["+12025550101", "group.manual"]},
+        {
+            **SETTINGS,
+            "send_read_receipts": True,
+            "destinations": ["+12025550101", "group.manual"],
+        },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["send_read_receipts"] is True
     assert result["data"]["destinations"][0]["id"] == "fixed-id"
     assert result["data"]["destinations"][1]["recipient"] == "group.manual"
 

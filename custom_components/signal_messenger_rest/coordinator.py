@@ -24,6 +24,7 @@ from .const import (
     MODES,
 )
 from .models import IncomingEvent, Reaction
+from .receipts import ReadReceipts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         self.send_lock = asyncio.Lock()
         self.alert_tasks: set[asyncio.Task] = set()
         self.assist = SignalAssist(self)
+        self.receipts = ReadReceipts(self)
 
     @property
     def message_signal(self) -> str:
@@ -94,6 +96,7 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         if not event_allowed and not handled:
             self.filtered_events += 1
             return
+        self.receipts.handle(message)
         self.last_received = dt_util.utcnow()
         if not event_allowed or (
             handled and not options.get("assist", {}).get("publish_events", False)

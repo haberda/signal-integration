@@ -69,6 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SignalConfigEntry) -> bo
         )
 
     async def stop_receiver(_event=None):
+        await coordinator.receipts.stop()
         await coordinator.assist.stop()
         await coordinator.stop_alerts()
         if coordinator.receiver_task is not None:
@@ -90,6 +91,7 @@ async def async_reload_entry(hass: HomeAssistant, entry: SignalConfigEntry) -> N
 async def async_unload_entry(hass: HomeAssistant, entry: SignalConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        await entry.runtime_data.receipts.stop()
         await entry.runtime_data.assist.stop()
         await entry.runtime_data.stop_alerts()
         task = entry.runtime_data.receiver_task

@@ -8,6 +8,11 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "receiver_connected": runtime.connected,
         "mode": runtime.client.mode,
         "filtered_events": runtime.filtered_events,
+        "read_receipts_enabled": entry.options.get("send_read_receipts", False),
+        "read_receipts_queued": runtime.receipts.queue.qsize(),
+        "read_receipts_sent": runtime.receipts.sent,
+        "read_receipts_failed": runtime.receipts.failed,
+        "read_receipts_dropped": runtime.receipts.dropped,
         "pending_alerts": len(runtime.alert_tasks),
         "assist_enabled": runtime.assist.settings.get("enabled", False),
         "assist_running_activation": runtime.assist.settings.get(

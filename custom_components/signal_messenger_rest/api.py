@@ -249,6 +249,21 @@ class SignalClient:
             )
         return result
 
+    async def send_read_receipt(
+        self, account: str, recipient: str, timestamp: int
+    ) -> None:
+        """Acknowledge a single incoming message, without retrying."""
+        async with self.lock:
+            await self.request(
+                "POST",
+                f"v1/receipts/{quote(account, safe='')}",
+                data={
+                    "recipient": recipient,
+                    "receipt_type": "read",
+                    "timestamp": timestamp,
+                },
+            )
+
     async def receive(self, account: str) -> list:
         async with self.lock:
             result = await self.request(
