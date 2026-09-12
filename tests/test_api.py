@@ -192,3 +192,39 @@ async def test_websocket_auth(aiohttp_server):
         with pytest.raises(InvalidAuth):
             async for _ in client.messages("account"):
                 pass
+
+
+async def test_group_http_contract(aiohttp_server):
+    seen = []
+
+    async def handler(request):
+        seen.append(
+            (
+                request.method,
+                request.path,
+                await request.json() if request.can_read_body else None,
+            )
+        )
+        if request.method == "GET":
+            return web.json_response([{"id": "group.test", "name": "Home"}])
+        if request.path.endswith("+123"):
+            return web.json_response({"id": "group.new"}, status=201)
+        return web.Response(status=204)
+
+    app = web.Application()
+    app.router.add_route("*", "/proxy/v1/groups/{tail:.*}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/proxy")))
+        assert (await client.groups("+123"))[0]["name"] == "Home"
+        await client.change_group(
+            "+123", "create", None, {"name": "New", "members": ["+456"]}
+        )
+        await client.change_group(
+            "+123", "remove_members", "group.test", {"members": ["+456"]}
+        )
+    assert seen == [
+        ("GET", "/proxy/v1/groups/+123", None),
+        ("POST", "/proxy/v1/groups/+123", {"name": "New", "members": ["+456"]}),
+        ("DELETE", "/proxy/v1/groups/+123/group.test/members", {"members": ["+456"]}),
+    ]

@@ -40,6 +40,7 @@ from .const import (
     DEFAULT_INTERVAL,
     DOMAIN,
 )
+from .group_flow import GroupFlowMixin
 
 
 def connection_schema(defaults: dict) -> vol.Schema:
@@ -337,11 +338,20 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
-class SignalOptionsFlow(OptionsFlow):
+class SignalOptionsFlow(GroupFlowMixin, OptionsFlow):
     def __init__(self):
         self._choices = {}
 
+    @property
+    def group_client(self):
+        entry = self.config_entry
+        runtime = getattr(entry, "runtime_data", None)
+        return runtime.client if runtime else client_for(self.hass, entry.data)
+
     async def async_step_init(self, user_input=None):
+        return self.async_show_menu(step_id="init", menu_options=["settings", "groups"])
+
+    async def async_step_settings(self, user_input=None):
         errors = {}
         options = dict(self.config_entry.options)
         choices = {
@@ -377,7 +387,7 @@ class SignalOptionsFlow(OptionsFlow):
             else:
                 return self.async_create_entry(data=options)
         return self.async_show_form(
-            step_id="init",
+            step_id="settings",
             data_schema=options_schema(
                 self._choices,
                 options,

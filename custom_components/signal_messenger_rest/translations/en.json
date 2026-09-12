@@ -77,7 +77,7 @@
   },
   "options": {
     "step": {
-      "init": {
+      "settings": {
         "title": "Destinations and receiving",
         "description": "Choose notification destinations and permitted senders/groups by name, or enter identifiers manually. Group events require BOTH an allowed sender and group. Empty sender lists deny all incoming events. Selecting a test destination sends one fixed test message when you submit; leave it blank to send nothing. In normal/native mode, disable other receivers and automatic receiving in the backend first.",
         "data": {
@@ -88,11 +88,85 @@
           "poll_interval": "Polling interval",
           "test_recipient": "Optional test message destination"
         }
+      },
+      "init": {
+        "title": "Signal options",
+        "menu_options": {
+          "settings": "Destinations and receiving",
+          "groups": "Manage Signal groups"
+        }
+      },
+      "groups": {
+        "title": "Manage Signal groups",
+        "description": "Changes apply directly to Signal. Creating a group does not enable notifications or authorize incoming messages; configure those separately under Destinations and receiving.",
+        "menu_options": {
+          "group_create": "Create a group",
+          "group_select": "Manage an existing group",
+          "settings": "Destinations and receiving"
+        }
+      },
+      "group_create": {
+        "title": "Create a Signal group",
+        "description": "Enter numbers in international format or Signal UUIDs. Leave the timer empty and permissions/link state unchanged to preserve existing settings. Backend permissions and version support determine which operations are available. You will review the change before it is sent.",
+        "data": {
+          "name": "Group name",
+          "description": "Description",
+          "members": "Member numbers or UUIDs",
+          "admins": "Administrator numbers or UUIDs",
+          "expiration_time": "Disappearing message timer (seconds; 0 disables)",
+          "group_link": "Invite link state",
+          "edit_group": "Who can edit the group",
+          "add_members": "Who can add members",
+          "send_messages": "Who can send messages"
+        }
+      },
+      "group_edit": {
+        "title": "Configure Signal group",
+        "description": "Enter numbers in international format or Signal UUIDs. Leave the timer empty and permissions/link state unchanged to preserve existing settings. Backend permissions and version support determine which operations are available. You will review the change before it is sent.",
+        "data": {
+          "name": "Group name",
+          "description": "Description",
+          "members": "Member numbers or UUIDs",
+          "admins": "Administrator numbers or UUIDs",
+          "expiration_time": "Disappearing message timer (seconds; 0 disables)",
+          "group_link": "Invite link state",
+          "edit_group": "Who can edit the group",
+          "add_members": "Who can add members",
+          "send_messages": "Who can send messages"
+        }
+      },
+      "group_select": {
+        "title": "Select a Signal group",
+        "data": {
+          "group": "Group"
+        }
+      },
+      "group_action": {
+        "title": "Manage {group}",
+        "description": "Current group details (including members, administrators and invite link):\n\n{details}",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "group_confirm": {
+        "title": "Confirm group change",
+        "description": "Apply “{action}” to “{group}” on Signal? Leaving removes this account from the group. Changes take effect immediately and are not undone by closing this dialog.\n\nRequested changes:\n{details}",
+        "data": {
+          "confirm": "Apply this change"
+        }
       }
     },
     "error": {
       "no_destinations": "Select or enter at least one destination.",
-      "test_failed": "The test send failed or its delivery is uncertain. No settings were saved. Check the backend URL, proxy credentials and account linkage. Test sending is now disabled; select a destination again only if you intend to send another test."
+      "test_failed": "The test send failed or its delivery is uncertain. No settings were saved. Check the backend URL, proxy credentials and account linkage. Test sending is now disabled; select a destination again only if you intend to send another test.",
+      "group_read_failed": "Cannot read groups. Check the connection, credentials and backend support, then try again.",
+      "group_missing": "This group is no longer available. Select another group.",
+      "no_groups": "No groups found. Go back to create a group.",
+      "invalid_group_input": "Enter a non-empty name and at least one number or UUID when adding or changing people."
+    },
+    "abort": {
+      "group_saved": "Group change sent successfully. Reopen options to view current group details or select notification destinations. Incoming permissions are unchanged.",
+      "group_change_failed": "The group change failed or its outcome is uncertain. It was not retried. Check the group in Signal and backend logs before trying again; the operation may already have been applied."
     }
   },
   "entity": {

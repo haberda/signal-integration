@@ -98,6 +98,9 @@ async def test_options_preserve_ids_and_allow_manual(hass, api_mock):
     entry.add_to_hass(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "settings"}
+    )
+    result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {**SETTINGS, "destinations": ["+12025550101", "group.manual"]},
     )
@@ -226,6 +229,9 @@ async def test_failed_options_test_does_not_save_or_repeat(hass, entry, api_mock
         side_effect=CannotConnect(),
     ) as send:
         result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "settings"}
+        )
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {**SETTINGS, "test_recipient": "+12025550101"}
         )

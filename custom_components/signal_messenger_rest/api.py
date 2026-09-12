@@ -260,3 +260,42 @@ class SignalClient:
                     "reaction": emoji,
                 },
             )
+
+    async def groups(self, account: str) -> list[dict]:
+        """Return current group metadata for UI management."""
+        async with self.lock:
+            result = await self.request("GET", f"/v1/groups/{quote(account, safe='')}")
+        if not isinstance(result, list) or any(
+            not isinstance(group, dict)
+            or not isinstance(group.get("id"), str)
+            or not group["id"].startswith("group.")
+            for group in result
+        ):
+            raise InvalidResponse("Invalid groups response")
+        return result
+
+    async def change_group(
+        self, account: str, action: str, group_id: str | None, data: dict
+    ) -> None:
+        """Perform one explicit group operation, without retries."""
+        routes = {
+            "create": ("POST", ""),
+            "edit": ("PUT", ""),
+            "add_members": ("POST", "/members"),
+            "remove_members": ("DELETE", "/members"),
+            "add_admins": ("POST", "/admins"),
+            "remove_admins": ("DELETE", "/admins"),
+            "leave": ("POST", "/quit"),
+        }
+        method, suffix = routes[action]
+        path = f"/v1/groups/{quote(account, safe='')}"
+        if action != "create":
+            if not group_id or not group_id.startswith("group."):
+                raise ValueError("A group ID is required")
+            path += f"/{quote(group_id, safe='')}"
+        async with self.lock:
+            result = await self.request(method, path + suffix, data=data)
+        if action == "create" and (
+            not isinstance(result, dict) or not isinstance(result.get("id"), str)
+        ):
+            raise InvalidResponse("Invalid create group response")
