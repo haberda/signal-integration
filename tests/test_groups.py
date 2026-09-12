@@ -169,3 +169,20 @@ async def test_groups_validates_response():
     ):
         with pytest.raises(InvalidResponse):
             await client.groups("+123")
+
+
+async def test_menu_labels_survive_missing_frontend_translations(hass, entry):
+    """Menu payloads must contain labels, not only translation identifiers."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["menu_options"] == {
+        "settings": "Destinations and receiving",
+        "groups": "Manage Signal groups",
+    }
+    result = await submit(hass, result, {"next_step_id": "groups"})
+    assert result["menu_options"] == {
+        "group_create": "Create a group",
+        "group_select": "Manage an existing group",
+        "settings": "Destinations and receiving",
+    }
+    result = await submit(hass, result, {"next_step_id": "group_create"})
+    assert result["step_id"] == "group_create"

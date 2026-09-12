@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Include explicit labels in both options menus so buttons remain visible when frontend translations are stale or unavailable.
+- After updating, restart Home Assistant and refresh the browser to reload page titles and field translations.
+
 ## 0.3.0
 
 - Discover running production and edge Signal add-ons and connect through Supervisor-reported internal DNS on port 8080.

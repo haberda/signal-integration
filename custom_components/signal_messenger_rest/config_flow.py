@@ -349,7 +349,15 @@ class SignalOptionsFlow(GroupFlowMixin, OptionsFlow):
         return runtime.client if runtime else client_for(self.hass, entry.data)
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["settings", "groups"])
+        return self.async_show_menu(
+            step_id="init",
+            # Explicit labels also render when the frontend has cached older
+            # translations that predate the options menu.
+            menu_options={
+                "settings": "Destinations and receiving",
+                "groups": "Manage Signal groups",
+            },
+        )
 
     async def async_step_settings(self, user_input=None):
         errors = {}

@@ -76,7 +76,12 @@ class GroupFlowMixin:
 
     async def async_step_groups(self, user_input=None):
         return self.async_show_menu(
-            step_id="groups", menu_options=["group_create", "group_select", "settings"]
+            step_id="groups",
+            menu_options={
+                "group_create": "Create a group",
+                "group_select": "Manage an existing group",
+                "settings": "Destinations and receiving",
+            },
         )
 
     async def async_step_group_create(self, user_input=None):

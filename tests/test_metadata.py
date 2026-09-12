@@ -19,7 +19,7 @@ def test_metadata():
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == COMPONENT.name
-    assert manifest["version"] == "0.3.0"
+    assert manifest["version"] == "0.3.1"
     assert hacs["homeassistant"] == "2026.9.1"
     assert json.loads((COMPONENT / "strings.json").read_text()) == json.loads(
         (COMPONENT / "translations/en.json").read_text()
@@ -75,3 +75,19 @@ async def test_acknowledgment_blueprint(hass):
     assert (
         config["actions"][0]["then"][0]["action"] == "signal_messenger_rest.send_alert"
     )
+
+
+async def test_options_translations_loaded_by_home_assistant(hass):
+    from homeassistant.helpers.translation import async_get_translations
+
+    translations = await async_get_translations(
+        hass, "en", "options", {"signal_messenger_rest"}
+    )
+    prefix = "component.signal_messenger_rest.options.step."
+    assert translations[prefix + "init.title"] == "Signal options"
+    assert (
+        translations[prefix + "settings.data.destinations"]
+        == "Notification destinations"
+    )
+    assert translations[prefix + "group_create.data.name"] == "Group name"
+    assert translations[prefix + "group_confirm.data.confirm"] == "Apply this change"
