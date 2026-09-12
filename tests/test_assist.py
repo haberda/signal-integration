@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import replace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -65,7 +65,9 @@ async def test_direct_routing_and_dedup(runtime, hass):
         runtime.receive_message(MESSAGE)
         runtime.receive_message(MESSAGE)
         await drain(runtime)
-        run.assert_awaited_once_with(hass, "test-pipeline", "turn on the light", None)
+        run.assert_awaited_once_with(
+            hass, "test-pipeline", "turn on the light", None, on_route=ANY
+        )
         runtime.send_message.assert_awaited_once_with(["alice"], "Turned on.")
         assert not events
         assert runtime.assist.completed == 1
@@ -148,7 +150,7 @@ async def test_sessions_isolated_reset_and_expiry(runtime):
 
 
 async def test_timeout_does_not_retry(runtime):
-    async def slow(*args):
+    async def slow(*args, **kwargs):
         await asyncio.Event().wait()
 
     with (
@@ -167,7 +169,7 @@ async def test_worker_is_bounded_and_unload_cancels(runtime, hass):
     started = asyncio.Event()
     cancelled = asyncio.Event()
 
-    async def slow(*args):
+    async def slow(*args, **kwargs):
         started.set()
         try:
             await asyncio.Event().wait()
@@ -252,7 +254,7 @@ async def test_all_direct_messages_and_reset(runtime):
 async def test_oversized_and_stale_requests_are_not_executed(runtime):
     gate = asyncio.Event()
 
-    async def wait_for_gate(*args):
+    async def wait_for_gate(*args, **kwargs):
         await gate.wait()
         return "ok", "s1"
 
@@ -281,3 +283,39 @@ async def test_failed_reply_does_not_repeat_pipeline(runtime):
         run.assert_awaited_once()
         runtime.send_message.assert_awaited_once()
         assert runtime.assist.failed == 1
+
+
+async def test_route_diagnostics_do_not_include_conversation_data(runtime, hass):
+    from custom_components.signal_messenger_rest.diagnostics import (
+        async_get_config_entry_diagnostics,
+    )
+
+    async def routed(*args, on_route):
+        on_route(
+            {
+                "selected_agent_is_local": False,
+                "prefer_local_intents": False,
+                "processed_locally": False,
+            }
+        )
+        return "Private reply", "private-conversation-id"
+
+    with patch(TARGET, side_effect=routed):
+        runtime.assist.handle(MESSAGE)
+        await drain(runtime)
+    diagnostics = await async_get_config_entry_diagnostics(hass, runtime.entry)
+    assert diagnostics["assist_running_activation"] == "prefix"
+    assert diagnostics["assist_configured_activation"] == "prefix"
+    assert diagnostics["assist_pipeline_matches_options"] is True
+    assert diagnostics["assist_last_route"] == {
+        "selected_agent_is_local": False,
+        "prefer_local_intents": False,
+        "processed_locally": False,
+    }
+    for private in (
+        "alice",
+        "Private reply",
+        "private-conversation-id",
+        "test-pipeline",
+    ):
+        assert private not in str(diagnostics)

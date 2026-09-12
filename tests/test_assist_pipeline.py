@@ -47,3 +47,164 @@ async def test_real_intent_pipeline(hass):
     )
     assert reply2
     assert same_id == session_id
+
+
+async def setup_agent_pipeline(hass):
+    from homeassistant.components.assist_pipeline.pipeline import async_get_pipelines
+    from homeassistant.components.conversation import (
+        AbstractConversationAgent,
+        ConversationResult,
+        async_set_agent,
+    )
+    from homeassistant.helpers.intent import IntentResponse
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    class Agent(AbstractConversationAgent):
+        def __init__(self, label, followup):
+            self.label = label
+            self.followup = followup
+            self.inputs = []
+
+        @property
+        def supported_languages(self):
+            return ["en"]
+
+        async def async_process(self, user_input):
+            self.inputs.append(user_input)
+            response = IntentResponse(language="en")
+            response.async_set_speech(self.label)
+            return ConversationResult(
+                response=response,
+                conversation_id=user_input.conversation_id,
+                continue_conversation=self.followup,
+            )
+
+    assert await async_setup_component(hass, "homeassistant", {})
+    with patch(
+        "homeassistant.components.ffmpeg.FFmpegManager.async_get_version",
+        new_callable=AsyncMock,
+        return_value=("test", 6),
+    ):
+        assert await async_setup_component(hass, "assist_pipeline", {})
+    agents = []
+    for label, followup in [("Previous agent", True), ("Selected agent", False)]:
+        entry = MockConfigEntry(domain="test_agent", title=label)
+        entry.add_to_hass(hass)
+        agent = Agent(label, followup)
+        async_set_agent(hass, entry, agent)
+        agents.append((entry.entry_id, agent))
+    return async_get_pipelines(hass)[0], agents
+
+
+async def test_local_disabled_never_intercepts_selected_agent(hass):
+    from homeassistant.components.assist_pipeline.pipeline import async_update_pipeline
+
+    pipeline, agents = await setup_agent_pipeline(hass)
+    selected_id, selected = agents[1]
+    await async_update_pipeline(
+        hass,
+        pipeline,
+        conversation_engine=selected_id,
+        prefer_local_intents=False,
+    )
+    with patch(
+        "homeassistant.components.conversation.async_handle_sentence_triggers",
+        new_callable=AsyncMock,
+        return_value="Local automation response",
+    ) as trigger:
+        conversation_id = None
+        routes = []
+        for _ in range(3):
+            reply, conversation_id = await run_text(
+                hass,
+                pipeline.id,
+                "A conversation request",
+                conversation_id,
+                on_route=routes.append,
+            )
+            assert reply == "Selected agent"
+        trigger.assert_not_awaited()
+        assert (
+            routes
+            == [
+                {
+                    "selected_agent_is_local": False,
+                    "prefer_local_intents": False,
+                    "processed_locally": False,
+                }
+            ]
+            * 3
+        )
+    assert len(selected.inputs) == 3
+
+
+async def test_switching_pipeline_agent_discards_old_followup(hass, entry, api_mock):
+    from dataclasses import replace
+
+    from homeassistant.components.assist_pipeline.pipeline import async_update_pipeline
+
+    from .test_assist import ASSIST, MESSAGE
+
+    pipeline, agents = await setup_agent_pipeline(hass)
+    old_id, old_agent = agents[0]
+    new_id, new_agent = agents[1]
+    await async_update_pipeline(
+        hass,
+        pipeline,
+        conversation_engine=old_id,
+        prefer_local_intents=False,
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            "assist": {**ASSIST, "pipeline": pipeline.id},
+        },
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = entry.runtime_data
+    runtime.send_message = AsyncMock(return_value={"success": True})
+    try:
+        runtime.assist.handle(MESSAGE)
+        await runtime.assist.queue.join()
+        assert runtime.send_message.call_args.args[1] == "Previous agent"
+        await async_update_pipeline(
+            hass,
+            pipeline,
+            conversation_engine=new_id,
+            prefer_local_intents=False,
+        )
+        for i in range(3):
+            runtime.assist.handle(replace(MESSAGE, timestamp=1001 + i))
+            await runtime.assist.queue.join()
+            assert runtime.send_message.call_args.args[1] == "Selected agent"
+        assert len(old_agent.inputs) == 1
+        assert len(new_agent.inputs) == 3
+        assert len({item.conversation_id for item in new_agent.inputs}) == 1
+        assert (
+            old_agent.inputs[0].conversation_id != new_agent.inputs[0].conversation_id
+        )
+    finally:
+        await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_local_enabled_still_allows_sentence_triggers(hass):
+    from homeassistant.components.assist_pipeline.pipeline import async_update_pipeline
+
+    pipeline, agents = await setup_agent_pipeline(hass)
+    selected_id, selected = agents[1]
+    await async_update_pipeline(
+        hass,
+        pipeline,
+        conversation_engine=selected_id,
+        prefer_local_intents=True,
+    )
+    with patch(
+        "homeassistant.components.conversation.async_handle_sentence_triggers",
+        new_callable=AsyncMock,
+        return_value="Local automation response",
+    ) as trigger:
+        reply, _ = await run_text(hass, pipeline.id, "Local command")
+        assert reply == "Local automation response"
+        trigger.assert_awaited_once()
+    assert not selected.inputs

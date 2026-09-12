@@ -19,7 +19,7 @@ def test_metadata():
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
     hacs = json.loads((ROOT / "hacs.json").read_text())
     assert manifest["domain"] == COMPONENT.name
-    assert manifest["version"] == "0.5.0"
+    assert manifest["version"] == "0.5.1"
     assert hacs["homeassistant"] == "2026.9.1"
     assert json.loads((COMPONENT / "strings.json").read_text()) == json.loads(
         (COMPONENT / "translations/en.json").read_text()

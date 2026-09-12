@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- Honor disabled local handling by using the selected agent without sentence-trigger interception.
+- Start fresh conversation context when a pipeline's agent, language or local-handling preference changes, preventing retained follow-ups from using the old agent.
+- Add content-free routing diagnostics for saved/running activation, pipeline selection consistency and the last completed response's local-processing status.
+- Cover repeated non-local replies, intentional local handling and mid-conversation agent switching with real Home Assistant pipeline tests.
+
 ## 0.5.0
 
 - Add direct text conversations with a selected Assist pipeline, without user-created automations.

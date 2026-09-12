@@ -10,6 +10,15 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "filtered_events": runtime.filtered_events,
         "pending_alerts": len(runtime.alert_tasks),
         "assist_enabled": runtime.assist.settings.get("enabled", False),
+        "assist_running_activation": runtime.assist.settings.get(
+            "direct_mode", "prefix"
+        ),
+        "assist_configured_activation": entry.options.get("assist", {}).get(
+            "direct_mode", "prefix"
+        ),
+        "assist_pipeline_matches_options": runtime.assist.settings.get("pipeline")
+        == entry.options.get("assist", {}).get("pipeline"),
+        "assist_last_route": dict(runtime.assist.last_route),
         "assist_queued": runtime.assist.queue.qsize(),
         "assist_completed": runtime.assist.completed,
         "assist_failed": runtime.assist.failed,
