@@ -182,6 +182,27 @@ class SignalAssist:
         self._updated()
         return True
 
+    @property
+    def status(self):
+        """Content-free operational status, including disabled entries."""
+        if self.closed:
+            return "stopped"
+        if not self.settings.get("enabled"):
+            return "disabled"
+        if not self.coordinator.entry.options.get("receive"):
+            return "receiving_disabled"
+        if not self.coordinator.last_update_success or not self.coordinator.connected:
+            return "disconnected"
+        try:
+            if (
+                pipeline_signature(self.coordinator.hass, self.settings.get("pipeline"))
+                is None
+            ):
+                return "pipeline_unavailable"
+        except Exception:
+            return "pipeline_unavailable"
+        return "processing" if self.active else "idle"
+
     def _updated(self):
         self.coordinator.async_update_listeners()
 

@@ -309,6 +309,42 @@
       },
       "last_received": {
         "name": "Last authorized activity"
+      },
+      "assist_status": {
+        "name": "Assist status",
+        "state": {
+          "disabled": "Disabled",
+          "receiving_disabled": "Receiving disabled",
+          "disconnected": "Disconnected",
+          "pipeline_unavailable": "Pipeline unavailable",
+          "processing": "Processing",
+          "idle": "Idle",
+          "stopped": "Stopped"
+        }
+      },
+      "assist_queued": {
+        "name": "Assist queued requests"
+      },
+      "assist_completed": {
+        "name": "Assist completed requests"
+      },
+      "assist_errors": {
+        "name": "Assist errors"
+      },
+      "assist_rejected": {
+        "name": "Assist rejected requests"
+      },
+      "assist_feedback_suppressed": {
+        "name": "Assist feedback suppressed"
+      },
+      "assist_last_error": {
+        "name": "Assist last error",
+        "state": {
+          "none": "None",
+          "pipeline_failed": "Pipeline failed",
+          "reply_failed": "Reply failed",
+          "feedback_failed": "Feedback failed"
+        }
       }
     },
     "event": {

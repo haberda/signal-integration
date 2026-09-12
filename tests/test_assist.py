@@ -377,3 +377,67 @@ async def test_unload_cancels_blocked_feedback(runtime):
     assert runtime.assist.feedback_queue.empty()
     assert runtime.assist.feedback_task.done()
     runtime.send_message.assert_awaited_once()
+
+
+async def test_assist_diagnostic_entities_update_without_content(runtime, hass):
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.signal_messenger_rest.const import DOMAIN
+
+    registry = er.async_get(hass)
+
+    def state(key):
+        entity_id = registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{runtime.entry.entry_id}_assist_{key}"
+        )
+        assert entity_id
+        return hass.states.get(entity_id)
+
+    assert state("status").state == "receiving_disabled"
+    assert state("errors").state == "0"
+    with patch(TARGET, new_callable=AsyncMock, side_effect=ValueError("SECRET")):
+        runtime.assist.handle(MESSAGE)
+        await drain(runtime)
+    assert state("errors").state == "1"
+    assert state("last_error").state == "pipeline_failed"
+    assert "SECRET" not in str(state("last_error").as_dict())
+    runtime.last_update_success = False
+    runtime.async_update_listeners()
+    assert state("errors").state == "1"
+    assert state("errors").state != "unavailable"
+
+
+async def test_assist_status_transitions(runtime, hass):
+    with patch.object(hass.config_entries, "async_reload", new_callable=AsyncMock):
+        hass.config_entries.async_update_entry(
+            runtime.entry, options={**runtime.entry.options, "receive": True}
+        )
+        assert runtime.assist.status == "disconnected"
+        runtime.connected = True
+        with patch(
+            "custom_components.signal_messenger_rest.assist.pipeline_signature",
+            return_value=None,
+        ) as signature:
+            assert runtime.assist.status == "pipeline_unavailable"
+            signature.side_effect = ValueError("SECRET")
+            assert runtime.assist.status == "pipeline_unavailable"
+            signature.side_effect = None
+            signature.return_value = ("pipeline",)
+            assert runtime.assist.status == "idle"
+            gate = asyncio.Event()
+
+            async def blocked(*args, **kwargs):
+                await gate.wait()
+                return "ok", "session"
+
+            with patch(TARGET, side_effect=blocked):
+                runtime.assist.handle(MESSAGE)
+                assert runtime.assist.status == "processing"
+                gate.set()
+                await drain(runtime)
+            assert runtime.assist.status == "idle"
+        runtime.assist.settings = {}
+        assert runtime.assist.status == "disabled"
+        await runtime.assist.stop()
+        assert runtime.assist.status == "stopped"
+        await hass.async_block_till_done()
