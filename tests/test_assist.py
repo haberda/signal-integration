@@ -54,6 +54,9 @@ async def drain(runtime):
     await runtime.assist.queue.join()
     if runtime.assist.task:
         await runtime.assist.task
+    await runtime.assist.feedback_queue.join()
+    if runtime.assist.feedback_task:
+        await runtime.assist.feedback_task
 
 
 async def test_direct_routing_and_dedup(runtime, hass):
@@ -188,7 +191,10 @@ async def test_worker_is_bounded_and_unload_cancels(runtime, hass):
         assert runtime.assist.queue.empty()
         assert run.await_count == 1
         assert not runtime.assist.handle(replace(MESSAGE, timestamp=9999))
-        runtime.send_message.assert_not_awaited()
+        assert all(
+            "busy" in call.args[1] for call in runtime.send_message.await_args_list
+        )
+        assert runtime.assist.feedback_queue.empty()
 
 
 async def test_opt_in_events_still_require_event_permissions(runtime, hass):
@@ -319,3 +325,55 @@ async def test_route_diagnostics_do_not_include_conversation_data(runtime, hass)
         "test-pipeline",
     ):
         assert private not in str(diagnostics)
+
+
+async def test_feedback_is_quoted_rate_limited_and_deduplicated(runtime):
+    with patch(
+        "custom_components.signal_messenger_rest.assist.monotonic", return_value=10
+    ) as now:
+        for i in range(12):
+            message = replace(MESSAGE, timestamp=2000 + i, text="/assist " + "x" * 4001)
+            assert runtime.assist.handle(message)
+            assert runtime.assist.handle(message)
+        await drain(runtime)
+        assert runtime.assist.dropped == 12
+        assert runtime.assist.rejected["oversized"] == 12
+        assert runtime.assist.feedback_suppressed == 7
+        assert runtime.send_message.await_count == 5
+        call = runtime.send_message.await_args_list[0]
+        assert "too long" in call.args[1]
+        assert call.kwargs == {"quote_timestamp": 2000, "quote_author": "+12025550101"}
+        now.return_value = 71
+        runtime.assist.handle(replace(message, timestamp=3000))
+        await drain(runtime)
+        assert runtime.send_message.await_count == 6
+
+
+async def test_feedback_failure_is_sanitized_and_not_retried(runtime):
+    runtime.send_message.side_effect = ValueError("SECRET")
+    runtime.assist.handle(replace(MESSAGE, text="/assist " + "x" * 4001))
+    await drain(runtime)
+    assert runtime.assist.failed == 1
+    assert runtime.assist.last_error == "feedback_failed"
+    runtime.send_message.assert_awaited_once()
+
+
+async def test_unload_cancels_blocked_feedback(runtime):
+    cancelled = asyncio.Event()
+
+    async def blocked(*args, **kwargs):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    runtime.send_message.side_effect = blocked
+    for i in range(3):
+        runtime.assist.handle(
+            replace(MESSAGE, timestamp=2000 + i, text="/assist " + "x" * 4001)
+        )
+    await runtime.assist.stop()
+    assert cancelled.is_set()
+    assert runtime.assist.feedback_queue.empty()
+    assert runtime.assist.feedback_task.done()
+    runtime.send_message.assert_awaited_once()

@@ -1,7 +1,7 @@
 """Bounded, opt-in Signal text conversations with an existing Assist pipeline."""
 
 import asyncio
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from time import monotonic
 
 from homeassistant.core import Context
@@ -14,6 +14,14 @@ MAX_SESSIONS = 64
 MAX_INPUT = 4000
 RUN_TIMEOUT = 60
 QUEUE_TIMEOUT = 60
+MAX_FEEDBACK_PENDING = 8
+FEEDBACK_BURST = 5
+FEEDBACK_WINDOW = 60
+FEEDBACK_TEXT = {
+    "busy": "Assist is busy and could not accept this request. It was not executed. Please try again shortly.",
+    "oversized": "This Assist request is too long. Keep it within 4,000 characters after the prefix and send it again. It was not executed.",
+    "expired": "This Assist request waited too long and expired before processing. It was not executed. Please send it again if still needed.",
+}
 
 
 class AssistError(Exception):
@@ -121,6 +129,13 @@ class SignalAssist:
         self.failed = 0
         self.dropped = 0
         self.last_route = {}
+        self.active = False
+        self.last_error = "none"
+        self.rejected = dict.fromkeys(FEEDBACK_TEXT, 0)
+        self.feedback_queue = asyncio.Queue(maxsize=MAX_FEEDBACK_PENDING)
+        self.feedback_task = None
+        self.feedback_times = deque()
+        self.feedback_suppressed = 0
 
     def handle(self, message):
         """Return whether this message belongs exclusively to Assist by default."""
@@ -153,26 +168,93 @@ class SignalAssist:
         self.seen[message.dedup_key] = None
         if len(self.seen) > 2048:
             self.seen.popitem(last=False)
-        if len(text) > MAX_INPUT or self.queue.full():
-            self.dropped += 1
+        if len(text) > MAX_INPUT:
+            self._reject(message, "oversized")
+            return True
+        if self.queue.full():
+            self._reject(message, "busy")
             return True
         self.queue.put_nowait((message, text, monotonic()))
         if self.task is None or self.task.done():
             self.task = self.coordinator.entry.async_create_background_task(
                 self.coordinator.hass, self._work(), "Signal Assist"
             )
+        self._updated()
         return True
+
+    def _updated(self):
+        self.coordinator.async_update_listeners()
+
+    def _reject(self, message, reason):
+        self.dropped += 1
+        self.rejected[reason] += 1
+        now = monotonic()
+        while self.feedback_times and now - self.feedback_times[0] >= FEEDBACK_WINDOW:
+            self.feedback_times.popleft()
+        if len(self.feedback_times) >= FEEDBACK_BURST or self.feedback_queue.full():
+            self.feedback_suppressed += 1
+        else:
+            self.feedback_times.append(now)
+            # Keep routing references only, never the rejected body or attachments.
+            self.feedback_queue.put_nowait(
+                (
+                    message.conversation_id,
+                    message.sender_number or message.sender_uuid,
+                    message.timestamp,
+                    reason,
+                    now,
+                )
+            )
+            if self.feedback_task is None or self.feedback_task.done():
+                self.feedback_task = (
+                    self.coordinator.entry.async_create_background_task(
+                        self.coordinator.hass,
+                        self._feedback(),
+                        "Signal Assist feedback",
+                    )
+                )
+        self._updated()
+
+    async def _feedback(self):
+        while not self.feedback_queue.empty():
+            recipient, author, timestamp, reason, queued_at = (
+                self.feedback_queue.get_nowait()
+            )
+            try:
+                if monotonic() - queued_at > QUEUE_TIMEOUT:
+                    self.feedback_suppressed += 1
+                    continue
+                try:
+                    result = await self.coordinator.send_message(
+                        [recipient],
+                        FEEDBACK_TEXT[reason],
+                        quote_timestamp=timestamp,
+                        quote_author=author,
+                    )
+                    if not result["success"]:
+                        self.failed += 1
+                        self.last_error = "feedback_failed"
+                except Exception:
+                    self.failed += 1
+                    self.last_error = "feedback_failed"
+            finally:
+                self.feedback_queue.task_done()
+                self._updated()
 
     async def _work(self):
         while not self.queue.empty():
             message, text, queued_at = self.queue.get_nowait()
             try:
                 if monotonic() - queued_at > QUEUE_TIMEOUT:
-                    self.dropped += 1
+                    self._reject(message, "expired")
                     continue
+                self.active = True
+                self._updated()
                 await self._process(message, text)
             finally:
+                self.active = False
                 self.queue.task_done()
+                self._updated()
 
     async def _process(self, message, text):
         key = (message.conversation_id, message.sender)
@@ -208,10 +290,13 @@ class SignalAssist:
                     # Pipeline exceptions can contain prompts, names or provider
                     # credentials. Never log or echo their contents.
                     self.failed += 1
+                    self.last_error = "pipeline_failed"
+                    self._updated()
                     conversation_id = None
                     reply = "Assist could not complete this request. It was not retried; an action may already have happened."
                 else:
                     self.completed += 1
+                    self._updated()
                     self.sessions[key] = (conversation_id, monotonic(), signature)
                     if len(self.sessions) > MAX_SESSIONS:
                         self.sessions.popitem(last=False)
@@ -226,17 +311,29 @@ class SignalAssist:
             )
             if not result["success"]:
                 self.failed += 1
+                self.last_error = "reply_failed"
         except Exception:
             # Sending failures must not kill the worker or retry an action.
             self.failed += 1
+            self.last_error = "reply_failed"
 
     async def stop(self):
         self.closed = True
-        if self.task and not self.task.done():
-            self.task.cancel()
-            await asyncio.gather(self.task, return_exceptions=True)
+        tasks = [
+            task for task in (self.task, self.feedback_task) if task and not task.done()
+        ]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         while not self.queue.empty():
             self.queue.get_nowait()
             self.queue.task_done()
+        while not self.feedback_queue.empty():
+            self.feedback_queue.get_nowait()
+            self.feedback_queue.task_done()
+        self.active = False
+        self.feedback_times.clear()
         self.sessions.clear()
         self.seen.clear()
+        self._updated()
