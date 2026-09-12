@@ -100,6 +100,7 @@ def options_schema(choices: dict[str, str], defaults: dict) -> vol.Schema:
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Optional("customize_names", default=False): BooleanSelector(),
             vol.Required(
                 CONF_RECEIVE, default=defaults.get(CONF_RECEIVE, False)
             ): BooleanSelector(),
@@ -146,7 +147,9 @@ def make_options(data: dict, choices: dict, previous: dict | None = None) -> dic
         )
     if not destinations:
         raise ValueError("Select at least one destination")
-    data = {k: v for k, v in data.items() if k != "test_recipient"}
+    data = {
+        k: v for k, v in data.items() if k not in {"test_recipient", "customize_names"}
+    }
     return {
         **(previous or {}),
         **data,
@@ -181,7 +184,42 @@ def error_key(err: Exception) -> str:
     return "cannot_connect"
 
 
-class SignalConfigFlow(LinkFlowMixin, ConfigFlow, domain=DOMAIN):
+class DestinationNamesMixin:
+    """Collect optional names before committing destination settings."""
+
+    async def _destination_names_or_finish(self, options, customize):
+        self._pending_options = options
+        self._destination_index = 0
+        if customize:
+            return await self.async_step_destination_name()
+        return self._finish_destination_options()
+
+    async def async_step_destination_name(self, user_input=None):
+        destinations = self._pending_options[CONF_DESTINATIONS]
+        destination = destinations[self._destination_index]
+        if user_input is not None:
+            name = user_input.get("name", "").strip()
+            destinations[self._destination_index] = {
+                **destination,
+                "name": name
+                or self._choices.get(
+                    destination["recipient"], destination["recipient"]
+                ),
+            }
+            self._destination_index += 1
+            if self._destination_index == len(destinations):
+                return self._finish_destination_options()
+            destination = destinations[self._destination_index]
+        return self.async_show_form(
+            step_id="destination_name",
+            data_schema=vol.Schema(
+                {vol.Optional("name", default=destination["name"]): TextSelector()}
+            ),
+            description_placeholders={"recipient": destination["recipient"]},
+        )
+
+
+class SignalConfigFlow(DestinationNamesMixin, LinkFlowMixin, ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self):
@@ -317,15 +355,20 @@ class SignalConfigFlow(LinkFlowMixin, ConfigFlow, domain=DOMAIN):
             except ValueError:
                 errors["base"] = "no_destinations"
             else:
-                return self.async_create_entry(
-                    title=f"Signal {self._data[CONF_ACCOUNT]}",
-                    data=self._data,
-                    options=options,
+                return await self._destination_names_or_finish(
+                    options, user_input.get("customize_names", False)
                 )
         return self.async_show_form(
             step_id="settings",
             data_schema=options_schema(self._choices, options),
             errors=errors,
+        )
+
+    def _finish_destination_options(self):
+        return self.async_create_entry(
+            title=f"Signal {self._data[CONF_ACCOUNT]}",
+            data=self._data,
+            options=self._pending_options,
         )
 
     async def async_step_reconfigure(self, user_input=None):
@@ -373,7 +416,12 @@ class SignalConfigFlow(LinkFlowMixin, ConfigFlow, domain=DOMAIN):
 
 
 class SignalOptionsFlow(
-    AssistFlowMixin, LinkFlowMixin, DeviceFlowMixin, GroupFlowMixin, OptionsFlow
+    DestinationNamesMixin,
+    AssistFlowMixin,
+    LinkFlowMixin,
+    DeviceFlowMixin,
+    GroupFlowMixin,
+    OptionsFlow,
 ):
     def __init__(self):
         self._choices = {}
@@ -409,7 +457,7 @@ class SignalOptionsFlow(
         errors = {}
         options = dict(self.config_entry.options)
         choices = {
-            d["recipient"]: d["name"]
+            d["recipient"]: d["recipient"]
             for d in self.config_entry.options.get(CONF_DESTINATIONS, [])
         }
         if user_input is None:
@@ -421,7 +469,7 @@ class SignalOptionsFlow(
                 )
             except CannotConnect, SignalError:
                 pass
-        self._choices.update(choices)
+            self._choices.update(choices)
         if user_input is not None:
             try:
                 options = make_options(
@@ -439,7 +487,9 @@ class SignalOptionsFlow(
             except ValueError:
                 errors["base"] = "no_destinations"
             else:
-                return self.async_create_entry(data=options)
+                return await self._destination_names_or_finish(
+                    options, user_input.get("customize_names", False)
+                )
         return self.async_show_form(
             step_id="settings",
             data_schema=options_schema(
@@ -448,3 +498,6 @@ class SignalOptionsFlow(
             ),
             errors=errors,
         )
+
+    def _finish_destination_options(self):
+        return self.async_create_entry(data=self._pending_options)

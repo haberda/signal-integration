@@ -261,3 +261,40 @@ async def test_rich_send_local_attachment_and_self(hass, entry, api_mock, tmp_pa
         assert send.call_args.kwargs["text_mode"] == "styled"
         assert send.call_args.kwargs["quote_message"] == "Original"
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_destination_name_drives_entity_name_and_initial_id(
+    hass, entry, api_mock
+):
+    destination = {**entry.options["destinations"][0], "name": "Family alerts"}
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "destinations": [destination]}
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "notify", DOMAIN, f"{entry.entry_id}_alice"
+    )
+    assert entity_id == "notify.signal_test_family_alerts"
+    assert (
+        hass.states.get(entity_id).attributes["friendly_name"]
+        == "Signal test Family alerts"
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            "destinations": [{**destination, "name": "Home alerts"}],
+        },
+    )
+    await hass.async_block_till_done()
+    assert (
+        registry.async_get_entity_id("notify", DOMAIN, f"{entry.entry_id}_alice")
+        == entity_id
+    )
+    assert (
+        hass.states.get(entity_id).attributes["friendly_name"]
+        == "Signal test Home alerts"
+    )
+    await hass.config_entries.async_unload(entry.entry_id)

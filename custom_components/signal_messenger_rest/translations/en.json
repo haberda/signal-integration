@@ -28,7 +28,8 @@
           "allowed_senders": "Allowed sender numbers or UUIDs",
           "allowed_groups": "Allowed group IDs",
           "poll_interval": "Polling interval",
-          "test_recipient": "Optional test message destination"
+          "test_recipient": "Optional test message destination",
+          "customize_names": "Customize destination names"
         }
       },
       "reconfigure": {
@@ -71,6 +72,13 @@
           "qr_code": "Signal linking code",
           "action": "Next step"
         }
+      },
+      "destination_name": {
+        "title": "Name notification destination",
+        "description": "Choose an optional name for {recipient}. Leave blank to use the contact/group name or recipient identifier. The name is included in the notify entity’s friendly name and its initial entity ID. Existing entity IDs and names overridden in Home Assistant are preserved.",
+        "data": {
+          "name": "Destination name"
+        }
       }
     },
     "error": {
@@ -108,7 +116,8 @@
           "allowed_senders": "Allowed sender numbers or UUIDs",
           "allowed_groups": "Allowed group IDs",
           "poll_interval": "Polling interval",
-          "test_recipient": "Optional test message destination"
+          "test_recipient": "Optional test message destination",
+          "customize_names": "Customize destination names"
         }
       },
       "init": {
@@ -246,6 +255,13 @@
           "prefix": "Command prefix",
           "conversation_timeout": "Conversation idle timeout",
           "publish_events": "Also publish handled messages as events"
+        }
+      },
+      "destination_name": {
+        "title": "Name notification destination",
+        "description": "Choose an optional name for {recipient}. Leave blank to use the contact/group name or recipient identifier. The name is included in the notify entity’s friendly name and its initial entity ID. Existing entity IDs and names overridden in Home Assistant are preserved.",
+        "data": {
+          "name": "Destination name"
         }
       }
     },

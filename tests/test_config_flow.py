@@ -322,3 +322,77 @@ async def test_stopped_addon_uses_manual_setup(hass, api_mock):
             DOMAIN, context={"source": "user"}
         )
         assert result["step_id"] == "user"
+
+
+async def test_setup_custom_destination_names(hass, api_mock):
+    with patch(
+        "custom_components.signal_messenger_rest.async_setup_entry", return_value=True
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}, data=CONNECTION
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"account": "+12025550100"}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                **SETTINGS,
+                "destinations": ["+12025550101", "group.manual"],
+                "customize_names": True,
+            },
+        )
+        assert result["step_id"] == "destination_name"
+        assert result["description_placeholders"] == {"recipient": "+12025550101"}
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"name": "  Family alerts  "}
+        )
+        assert result["step_id"] == "destination_name"
+        assert result["description_placeholders"] == {"recipient": "group.manual"}
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"name": "  "}
+        )
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert [d["name"] for d in result["options"]["destinations"]] == [
+            "Family alerts",
+            "group.manual",
+        ]
+        assert "customize_names" not in result["options"]
+        await hass.async_block_till_done()
+
+
+async def test_options_custom_names_are_atomic_and_preserve_ids(hass, entry, api_mock):
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            "destinations": [
+                entry.options["destinations"][0],
+                {**entry.options["destinations"][1], "name": "Old custom name"},
+            ],
+        },
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "settings"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **SETTINGS,
+            "destinations": ["+12025550101", "group.test"],
+            "customize_names": True,
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"name": "Personal alerts"}
+    )
+    assert entry.options["destinations"][0]["name"] == "Alice"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"name": ""}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["destinations"] == [
+        {"id": "alice", "recipient": "+12025550101", "name": "Personal alerts"},
+        {"id": "group", "recipient": "group.test", "name": "Household"},
+    ]
