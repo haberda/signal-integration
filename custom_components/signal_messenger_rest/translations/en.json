@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connect to Signal REST API",
-        "description": "Connect to an existing Signal add-on or standalone REST API. Link or register an account in that backend before continuing.",
+        "description": "Connect to a Signal add-on or standalone REST API. Next, choose an existing account or link your phone using a QR code.",
         "data": {
           "url": "API URL",
           "username": "Proxy username (optional)",
@@ -16,7 +16,8 @@
         "title": "Select Signal account",
         "data": {
           "account": "Account"
-        }
+        },
+        "description": "Choose a linked or registered account, or link your phone using a QR code. If no accounts are listed, use QR linking or register/link an account in the backend and refresh this list. SMS/voice registration, CAPTCHA and PIN entry are handled by the backend. Each account gets a separate integration entry."
       },
       "settings": {
         "title": "Destinations and receiving",
@@ -55,6 +56,21 @@
         "data": {
           "addon": "Connection"
         }
+      },
+      "link_start": {
+        "title": "Link your phone account",
+        "description": "This links the REST API backend as a companion to your existing Signal phone account. Choose a name you will recognize in Signal’s Linked devices list, then continue to generate a QR code. If you already linked this phone here, choose the existing account instead.",
+        "data": {
+          "device_name": "Linked device name"
+        }
+      },
+      "link_scan": {
+        "title": "Scan with Signal on your phone",
+        "description": "On your phone, open Signal → Settings → Linked devices → Link new device and scan this code. Approve linking on the phone, then select “I scanned the code” and continue. Account discovery can take a little time; check again if needed.\n\nThe code is hidden after five minutes and may expire earlier on Signal. Requesting a replacement requires another confirmation. Closing this dialog does not cancel a handshake already started by the backend. If you relinked an account already listed here, choose “Choose an existing account” after completing linking.",
+        "data": {
+          "qr_code": "Signal linking code",
+          "action": "Next step"
+        }
       }
     },
     "error": {
@@ -64,7 +80,11 @@
       "unsupported_server": "The server must expose v2 sending and a recognized execution mode.",
       "no_destinations": "Select or enter at least one destination.",
       "account_missing": "The selected account is no longer linked to this backend.",
-      "test_failed": "The test send failed or its delivery is uncertain. No settings were saved. Check the backend URL, proxy credentials and account linkage. Test sending is now disabled; select a destination again only if you intend to send another test."
+      "test_failed": "The test send failed or its delivery is uncertain. No settings were saved. Check the backend URL, proxy credentials and account linkage. Test sending is now disabled; select a destination again only if you intend to send another test.",
+      "invalid_device_name": "Enter a device name between 1 and 64 characters.",
+      "account_read_failed": "Cannot read backend accounts. Check the connection and credentials, then try again.",
+      "link_pending": "No new account found yet. Complete linking on your phone and check again.",
+      "link_expired": "The QR display has expired. You can still check for a completed link or explicitly request a new code."
     },
     "abort": {
       "no_accounts": "No accounts found. Link your phone in the backend, then add this integration again.",
@@ -72,7 +92,9 @@
       "account_missing": "The selected account is no longer linked to this backend.",
       "invalid_auth": "Proxy authentication failed. Check your credentials.",
       "reauth_successful": "Credentials updated.",
-      "reconfigure_successful": "Connection updated."
+      "reconfigure_successful": "Connection updated.",
+      "link_failed": "Could not start QR linking, or its outcome is uncertain. No retry was made. Check the backend connection, credentials and support for /v1/qrcodelink/raw. You can link through the backend and then refresh the account list. If a handshake was started, let it expire before starting another.",
+      "account_read_failed": "Cannot read backend accounts. Check the connection and credentials, then try again."
     }
   },
   "options": {
@@ -93,7 +115,8 @@
         "title": "Signal options",
         "menu_options": {
           "settings": "Destinations and receiving",
-          "groups": "Manage Signal groups"
+          "groups": "Manage Signal groups",
+          "accounts": "Accounts and linked devices"
         }
       },
       "groups": {
@@ -155,6 +178,60 @@
         "data": {
           "confirm": "Apply this change"
         }
+      },
+      "link_start": {
+        "title": "Link your phone account",
+        "description": "This links the REST API backend as a companion to your existing Signal phone account. Choose a name you will recognize in Signal’s Linked devices list, then continue to generate a QR code. If you already linked this phone here, choose the existing account instead.",
+        "data": {
+          "device_name": "Linked device name"
+        }
+      },
+      "link_scan": {
+        "title": "Scan with Signal on your phone",
+        "description": "On your phone, open Signal → Settings → Linked devices → Link new device and scan this code. Approve linking on the phone, then select “I scanned the code” and continue. Account discovery can take a little time; check again if needed.\n\nThe code is hidden after five minutes and may expire earlier on Signal. Requesting a replacement requires another confirmation. Closing this dialog does not cancel a handshake already started by the backend. If you relinked an account already listed here, choose “Choose an existing account” after completing linking.",
+        "data": {
+          "qr_code": "Signal linking code",
+          "action": "Next step"
+        }
+      },
+      "accounts": {
+        "title": "Accounts and linked devices",
+        "description": "This integration uses **{account}**.\n\nAccounts currently available on this backend: {accounts}\n\nLinking another account does not switch this integration’s account. To configure that account in Home Assistant, add another Signal Messenger REST integration entry and select it.",
+        "menu_options": {
+          "devices": "View and manage linked devices",
+          "link_start": "Link a phone account to this backend",
+          "init": "Back to options"
+        }
+      },
+      "devices": {
+        "title": "Linked devices",
+        "description": "Devices for **{account}**:\n\n{devices}\n\nAdding or removing devices may require this backend to be the primary account. For a backend linked to your phone, use Signal’s Linked devices settings if the backend rejects the operation. Device times are UTC.",
+        "menu_options": {
+          "device_add": "Link another device (primary account only)",
+          "device_remove": "Remove a linked device",
+          "accounts": "Back to accounts"
+        }
+      },
+      "device_add": {
+        "title": "Link another device",
+        "description": "Use this when the REST API backend is the primary Signal account. Paste the Signal linking URI generated by the new companion device. To link this backend to your phone instead, use “Link a phone account” in Accounts and linked devices.",
+        "data": {
+          "uri": "New device’s Signal linking URI"
+        }
+      },
+      "device_remove": {
+        "title": "Remove a linked device",
+        "description": "Choose the device to unlink from this Signal account. The primary device is excluded. Check the device name carefully; removing the device used by this integration will disconnect it.",
+        "data": {
+          "device": "Linked device"
+        }
+      },
+      "device_confirm": {
+        "title": "Confirm device change",
+        "description": "Apply “{action}” for **{device}** on account **{account}**? Adding a companion grants it access to this Signal account. Removing a device disconnects it, and removing the backend’s own device interrupts this integration. The operation applies immediately and cannot be undone by closing this dialog.",
+        "data": {
+          "confirm": "Apply this device change"
+        }
       }
     },
     "error": {
@@ -163,11 +240,23 @@
       "group_read_failed": "Cannot read groups. Check the connection, credentials and backend support, then try again.",
       "group_missing": "This group is no longer available. Select another group.",
       "no_groups": "No groups found. Go back to create a group.",
-      "invalid_group_input": "Enter a non-empty name and at least one number or UUID when adding or changing people."
+      "invalid_group_input": "Enter a non-empty name and at least one number or UUID when adding or changing people.",
+      "invalid_device_name": "Enter a device name between 1 and 64 characters.",
+      "account_read_failed": "Cannot read backend accounts. Check the connection and credentials, then try again.",
+      "link_pending": "No new account found yet. Complete linking on your phone and check again.",
+      "link_expired": "The QR display has expired. You can still check for a completed link or explicitly request a new code.",
+      "invalid_link_uri": "Enter a Signal device-link URI containing its UUID and public key.",
+      "device_missing": "The device is no longer listed. Choose another device."
     },
     "abort": {
       "group_saved": "Group change sent successfully. Reopen options to view current group details or select notification destinations. Incoming permissions are unchanged.",
-      "group_change_failed": "The group change failed or its outcome is uncertain. It was not retried. Check the group in Signal and backend logs before trying again; the operation may already have been applied."
+      "group_change_failed": "The group change failed or its outcome is uncertain. It was not retried. Check the group in Signal and backend logs before trying again; the operation may already have been applied.",
+      "link_failed": "Could not start QR linking, or its outcome is uncertain. No retry was made. Check the backend connection, credentials and support for /v1/qrcodelink/raw. You can link through the backend and then refresh the account list. If a handshake was started, let it expire before starting another.",
+      "account_read_failed": "Cannot read backend accounts. Check the connection and credentials, then try again.",
+      "device_read_failed": "Cannot read linked devices. Check the connection, credentials and whether this backend/account supports device listing. You can manage linked devices from your Signal phone.",
+      "no_linked_devices": "No removable companion devices were returned. The primary device cannot be removed here.",
+      "device_change_failed": "The device change failed or its outcome is uncertain. It was not retried. Check Signal’s Linked devices list before trying again. The backend may require the primary account for this operation.",
+      "device_saved": "Device change sent successfully. Reopen Accounts and linked devices to refresh the list."
     }
   },
   "entity": {

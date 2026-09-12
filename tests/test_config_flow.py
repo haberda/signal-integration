@@ -81,7 +81,12 @@ async def test_no_accounts(hass, api_mock):
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}, data=CONNECTION
     )
-    assert result["reason"] == "no_accounts"
+    assert result["step_id"] == "account"
+    selector = next(iter(result["data_schema"].schema.values()))
+    assert {option["value"] for option in selector.config["options"]} == {
+        "link_phone",
+        "refresh_accounts",
+    }
 
 
 async def test_options_preserve_ids_and_allow_manual(hass, api_mock):

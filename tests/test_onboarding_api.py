@@ -27,9 +27,8 @@ async def test_account_device_contract(aiohttp_server):
                 await request.json() if request.can_read_body else None,
             )
         )
-        assert (
-            request.headers["Authorization"]
-            == aiohttp.BasicAuth("proxy", "secret").encode()
+        assert request.headers["Authorization"] == aiohttp.encode_basic_auth(
+            "proxy", "secret"
         )
         if request.path.endswith("/accounts"):
             return web.json_response(["+123", "+456"])

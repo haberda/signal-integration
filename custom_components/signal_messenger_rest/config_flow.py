@@ -40,7 +40,9 @@ from .const import (
     DEFAULT_INTERVAL,
     DOMAIN,
 )
+from .device_flow import DeviceFlowMixin
 from .group_flow import GroupFlowMixin
+from .link_flow import LinkFlowMixin
 
 
 def connection_schema(defaults: dict) -> vol.Schema:
@@ -177,7 +179,7 @@ def error_key(err: Exception) -> str:
     return "cannot_connect"
 
 
-class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
+class SignalConfigFlow(LinkFlowMixin, ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self):
@@ -206,8 +208,6 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
                 self._client = client_for(self.hass, self._data)
                 _, self._accounts = await self._client.discover()
-                if not self._accounts:
-                    return self.async_abort(reason="no_accounts")
                 return await self.async_step_account()
             except (SignalError, ValueError) as err:
                 errors["base"] = error_key(err)
@@ -244,9 +244,25 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    @property
+    def link_client(self):
+        return self._client
+
+    async def async_link_finished(self, accounts):
+        self._accounts = accounts
+        return await self.async_step_account()
+
     async def async_step_account(self, user_input=None):
         if user_input is not None:
             account = user_input[CONF_ACCOUNT]
+            if account == "link_phone":
+                return await self.async_step_link_start()
+            if account == "refresh_accounts":
+                try:
+                    self._accounts = await self._client.accounts()
+                except SignalError:
+                    return self.async_abort(reason="account_read_failed")
+                return await self.async_step_account()
             if account not in self._accounts:
                 return self.async_abort(reason="account_missing")
             self._data[CONF_ACCOUNT] = account
@@ -256,13 +272,29 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._choices = await self._client.destinations(account)
             except InvalidAuth:
                 return self.async_abort(reason="invalid_auth")
+            self._choices.setdefault(account, "Note to self")
             return await self.async_step_settings()
         return self.async_show_form(
             step_id="account",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_ACCOUNT): SelectSelector(
-                        SelectSelectorConfig(options=self._accounts)
+                        SelectSelectorConfig(
+                            options=[
+                                {"value": account, "label": account}
+                                for account in self._accounts
+                            ]
+                            + [
+                                {
+                                    "value": "link_phone",
+                                    "label": "Link a phone account using a QR code",
+                                },
+                                {
+                                    "value": "refresh_accounts",
+                                    "label": "Refresh account list",
+                                },
+                            ]
+                        )
                     ),
                 }
             ),
@@ -338,7 +370,7 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
-class SignalOptionsFlow(GroupFlowMixin, OptionsFlow):
+class SignalOptionsFlow(LinkFlowMixin, DeviceFlowMixin, GroupFlowMixin, OptionsFlow):
     def __init__(self):
         self._choices = {}
 
@@ -348,6 +380,14 @@ class SignalOptionsFlow(GroupFlowMixin, OptionsFlow):
         runtime = getattr(entry, "runtime_data", None)
         return runtime.client if runtime else client_for(self.hass, entry.data)
 
+    @property
+    def link_client(self):
+        return self.group_client
+
+    async def async_link_finished(self, accounts):
+        # Linking does not change the account bound to an existing config entry.
+        return await self.async_step_accounts()
+
     async def async_step_init(self, user_input=None):
         return self.async_show_menu(
             step_id="init",
@@ -356,6 +396,7 @@ class SignalOptionsFlow(GroupFlowMixin, OptionsFlow):
             menu_options={
                 "settings": "Destinations and receiving",
                 "groups": "Manage Signal groups",
+                "accounts": "Accounts and linked devices",
             },
         )
 
