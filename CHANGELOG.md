@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.4
+
+- Add an optional typing indicator while Assist processes and replies in direct or group chats.
+- Refresh indicators during longer requests and attempt to stop them on success, failure and unload.
+- Bound indicator operations and isolate failures from Assist responses.
+
 ## 0.5.3
 
 - Add an opt-in Send read receipts setting for incoming messages accepted by event permissions or Assist.

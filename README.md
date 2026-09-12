@@ -90,6 +90,9 @@ Assist permissions are separate from message-event permissions. An empty Assist 
 
 Replies go to the originating direct or group chat; group replies quote the original command and are visible to that group's members. Voice notes and attachments are not processed by this feature. Replies are text only.
 
+Enable **Show typing while Assist responds** in Assist settings to attempt to show a typing indicator in the active direct or group conversation. It defaults to off. The indicator starts when processing begins, refreshes every eight seconds, and stops after reply delivery, failure, or cancellation. Queued and rejected requests do not start indicators. Each indicator operation has a two-second deadline; a failed start or refresh ends further refreshes for that request without interrupting Assist. Stopping is best-effort if the backend is unreachable. The backend provides [typing indicator endpoints](https://github.com/bbernhard/signal-cli-rest-api/blob/master/src/api/api.go).
+
+
 Conversation context is isolated by integration account, chat and sender. Follow-up requests reuse a Home Assistant conversation ID when available. After the configured idle interval (30–300 seconds), the next request starts fresh; an agent may retain context for less time. Send `/assist /reset` to start a new conversation immediately, replacing `/assist` if you chose another prefix. In all-direct-messages mode, `/reset` alone also works. Reset starts a new conversation; it does not delete Home Assistant's existing traces or agent history.
 
 By default, requests handled by Assist are not also published as `signal_messenger_rest_message_received` events. This avoids duplicate replies from existing automations. **Also publish handled messages as events** enables that behavior, but the normal event sender/group permissions still apply. Ordinary messages and reactions retain their existing event behavior.
