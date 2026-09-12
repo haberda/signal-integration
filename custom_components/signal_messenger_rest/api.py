@@ -4,7 +4,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 import aiohttp
 from yarl import URL
@@ -50,6 +50,24 @@ def normalize_url(value: str) -> str:
             "Enter an HTTP(S) URL without credentials, query or fragment"
         ) from err
     return str(url).rstrip("/")
+
+
+def validate_link_uri(value: str) -> str:
+    """Accept Signal provisioning URIs without reflecting secret input in errors."""
+    try:
+        if not isinstance(value, str) or len(value) > 4096:
+            raise ValueError
+        uri = urlsplit(value.strip())
+        if uri.scheme not in {"sgnl", "tsdevice"}:
+            raise ValueError
+        if uri.scheme == "sgnl" and uri.netloc != "linkdevice":
+            raise ValueError
+        query = parse_qs(uri.query)
+        if not query.get("uuid") or not query.get("pub_key"):
+            raise ValueError
+    except ValueError, TypeError:
+        raise ValueError("Invalid Signal device link URI") from None
+    return value.strip()
 
 
 class SignalClient:
@@ -124,13 +142,60 @@ class SignalClient:
             raise UnsupportedServer("Unsupported or missing execution mode")
         if not isinstance(about.get("versions"), list) or "v2" not in about["versions"]:
             raise UnsupportedServer("The API must support v2 sending")
-        accounts = await self.request("GET", "v1/accounts", request_timeout=30)
-        if not isinstance(accounts, list) or not all(
-            isinstance(a, str) for a in accounts
-        ):
-            raise InvalidResponse("Invalid account list")
+        accounts = await self.accounts()
         self.mode = about["mode"]
         return about, accounts
+
+    async def accounts(self) -> list[str]:
+        """List backend accounts without starting a linking operation."""
+        accounts = await self.request("GET", "v1/accounts", request_timeout=30)
+        if not isinstance(accounts, list) or not all(
+            isinstance(a, str) and a for a in accounts
+        ):
+            raise InvalidResponse("Invalid account list")
+        return list(dict.fromkeys(accounts))
+
+    async def start_link(self, device_name: str) -> str:
+        """Start one backend-owned link handshake; never retry implicitly."""
+        async with self.lock:
+            result = await self.request(
+                "GET",
+                "v1/qrcodelink/raw",
+                params={"device_name": device_name},
+                request_timeout=30,
+            )
+        try:
+            return validate_link_uri(result["device_link_uri"])
+        except KeyError, TypeError, ValueError:
+            raise InvalidResponse("Invalid device link response") from None
+
+    async def devices(self, account: str) -> list[dict]:
+        async with self.lock:
+            result = await self.request("GET", f"v1/devices/{quote(account, safe='')}")
+        if not isinstance(result, list) or any(
+            not isinstance(device, dict)
+            or type(device.get("id")) is not int
+            or device["id"] < 1
+            or not isinstance(device.get("name", ""), str)
+            for device in result
+        ):
+            raise InvalidResponse("Invalid device list")
+        return result
+
+    async def add_device(self, account: str, uri: str) -> None:
+        uri = validate_link_uri(uri)
+        async with self.lock:
+            await self.request(
+                "POST", f"v1/devices/{quote(account, safe='')}", data={"uri": uri}
+            )
+
+    async def remove_device(self, account: str, device_id: int) -> None:
+        if type(device_id) is not int or device_id <= 1:
+            raise ValueError("Select a linked device, not the primary device")
+        async with self.lock:
+            await self.request(
+                "DELETE", f"v1/devices/{quote(account, safe='')}/{device_id}"
+            )
 
     async def destinations(self, account: str) -> dict[str, str]:
         """Metadata is optional; callers may always enter destinations manually."""
