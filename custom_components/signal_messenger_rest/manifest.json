@@ -2,6 +2,7 @@
   "domain": "signal_messenger_rest",
   "name": "Signal Messenger REST",
   "after_dependencies": [
+    "assist_pipeline",
     "hassio"
   ],
   "codeowners": [

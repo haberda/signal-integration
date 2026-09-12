@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import InvalidAuth, SignalClient, SignalError
+from .assist import SignalAssist
 from .attachments import encode_attachments
 from .const import (
     CONF_ACCOUNT,
@@ -50,6 +51,7 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         self.receiver_task = None
         self.send_lock = asyncio.Lock()
         self.alert_tasks: set[asyncio.Task] = set()
+        self.assist = SignalAssist(self)
 
     @property
     def message_signal(self) -> str:
@@ -85,12 +87,19 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
     @callback
     def receive_message(self, message: IncomingEvent) -> None:
         options = self.entry.options
-        if not message.allowed(
+        handled = self.assist.handle(message)
+        event_allowed = message.allowed(
             options.get(CONF_SENDERS, []), options.get(CONF_GROUPS, [])
-        ):
+        )
+        if not event_allowed and not handled:
             self.filtered_events += 1
             return
         self.last_received = dt_util.utcnow()
+        if not event_allowed or (
+            handled and not options.get("assist", {}).get("publish_events", False)
+        ):
+            self.async_update_listeners()
+            return
         self.hass.bus.async_fire(
             EVENT_REACTION if isinstance(message, Reaction) else EVENT_MESSAGE,
             {
