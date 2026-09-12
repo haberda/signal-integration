@@ -287,6 +287,14 @@ After verifying sending, remove the old YAML notifier. Before enabling receiving
 
 Before a public release, validate these cases on a linked test account: direct/group/self sending; a local and URL attachment; a quoted reply to direct/group messages; two identical incoming texts; a sender without a phone number; unauthorized sender/group filtering; backend restart; HA restart/reload; a backend mode change; account unlinking; send timeout and partial failure. Check add-on and standalone deployments independently. Verify production/edge discovery, both add-ons running, manual fallback, and group creation/settings/membership/admin/leave changes with a test group. Validate QR scanning and approval, account discovery, QR expiry/replacement, multiple accounts, and device listing/addition/removal on both primary and companion backends. Never send real messages from automated CI.
 
+### Read receipts
+
+Enable **Send read receipts** under **Configure → Destinations and receiving**, with receiving enabled, to tell senders when the integration reads their messages. The option defaults to off.
+
+Receipts are sent for messages accepted by the incoming sender/group permissions or handled by Assist, including requests Assist rejects as busy, oversized or expired. A read receipt means the integration received and handled the message; it does not confirm that an automation or Assist command succeeded. Filtered messages, reactions and duplicates are not acknowledged. For group messages, receipts go to the original sender.
+
+The integration uses the backend's [read receipt endpoint](https://github.com/bbernhard/signal-cli-rest-api/blob/master/src/api/api.go), supporting both polling and WebSocket receiving. Receipts run separately from message processing, with at most 128 pending receipts and a 15-second deadline per attempt. Failed sends are not retried, and pending receipts are canceled on reload or shutdown. Downloaded diagnostics include `read_receipts_sent`, `read_receipts_failed`, `read_receipts_dropped` and `read_receipts_queued`; counters reset on reload. Check these if senders still do not see read receipts after enabling the option.
+
 ### Receiving troubleshooting
 
 | Symptom | Check |

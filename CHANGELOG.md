@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+- Add an opt-in Send read receipts setting for incoming messages accepted by event permissions or Assist.
+- Send receipts to the original sender for direct and group messages in polling and WebSocket modes.
+- Bound receipt work, suppress duplicates, cancel pending receipts on unload and expose content-free delivery counters in diagnostics.
+
 ## 0.5.2
 
 - Explain busy, oversized and expired Assist requests with quoted, rate-limited replies.
