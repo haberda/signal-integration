@@ -48,6 +48,13 @@
           "password": "Proxy password (optional)",
           "verify_ssl": "Verify TLS certificate"
         }
+      },
+      "addon": {
+        "title": "Running Signal add-on detected",
+        "description": "Connect over the internal Docker network on port 8080, or enter a URL manually.",
+        "data": {
+          "addon": "Connection"
+        }
       }
     },
     "error": {

@@ -21,6 +21,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from .addon import running_addons
 from .api import (
     CannotConnect,
     InvalidAuth,
@@ -183,6 +184,7 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
         self._accounts: list[str] = []
         self._choices: dict[str, str] = {}
         self._client: SignalClient | None = None
+        self._addons: dict[str, str] = {}
 
     @staticmethod
     @callback
@@ -191,6 +193,10 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         errors = {}
+        if user_input is None:
+            self._addons = running_addons(self.hass)
+        if user_input is None and self._addons:
+            return await self.async_step_addon()
         if user_input is not None:
             try:
                 self._data = {
@@ -208,6 +214,33 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=connection_schema(user_input or {}),
             errors=errors,
+        )
+
+    async def async_step_addon(self, user_input=None):
+        if user_input is not None:
+            url = user_input["addon"]
+            if url == "manual":
+                return self.async_show_form(
+                    step_id="user", data_schema=connection_schema({})
+                )
+            return await self.async_step_user({CONF_URL: url, CONF_VERIFY_SSL: True})
+        return self.async_show_form(
+            step_id="addon",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "addon", default=next(iter(self._addons))
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                {"value": url, "label": label}
+                                for url, label in self._addons.items()
+                            ]
+                            + [{"value": "manual", "label": "Enter a URL manually"}]
+                        )
+                    )
+                }
+            ),
         )
 
     async def async_step_account(self, user_input=None):

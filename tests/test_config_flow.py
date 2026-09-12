@@ -241,3 +241,41 @@ async def test_failed_options_test_does_not_save_or_repeat(hass, entry, api_mock
         assert result["type"] == FlowResultType.CREATE_ENTRY
         assert send.await_count == 1
         assert "test_recipient" not in entry.options
+
+
+@pytest.mark.parametrize(
+    "slug", ["1315902c_signal_messenger", "c5ecc243_signal_messenger"]
+)
+async def test_detect_addon(hass, api_mock, slug):
+    with patch(
+        "custom_components.signal_messenger_rest.addon.get_addons_info",
+        return_value={slug: {"state": "started", "hostname": slug.replace("_", "-")}},
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        assert result["step_id"] == "addon"
+        url = f"http://{slug.replace('_', '-')}:8080"
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"addon": url}
+        )
+        assert result["step_id"] == "account"
+
+
+async def test_addon_manual_and_stopped(hass, api_mock):
+    with patch(
+        "custom_components.signal_messenger_rest.addon.get_addons_info",
+        return_value={
+            "1315902c_signal_messenger": {"state": "stopped"},
+            "c5ecc243_signal_messenger": {"state": "started"},
+        },
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        selector = next(iter(result["data_schema"].schema.values()))
+        assert len(selector.config["options"]) == 2
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"addon": "manual"}
+        )
+        assert result["step_id"] == "user"
