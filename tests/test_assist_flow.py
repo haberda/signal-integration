@@ -124,3 +124,62 @@ async def test_troubleshooting_clear_loaded_sessions(hass, entry, api_mock):
     assert result["description_placeholders"]["sessions"] == "0"
     assert entry.runtime_data.assist.session_generation == 1
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_destination_pipeline_add_remove_and_preserve(hass, entry, api_mock):
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            "assist": {
+                **ASSIST,
+                "destination_pipelines": {"group.test": "group-pipeline"},
+            },
+        },
+    )
+    with patch(
+        CHOICES, return_value={"test-pipeline": "Home", "group-pipeline": "Group"}
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "assist_routes"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"destination": "alice", "pipeline": "test-pipeline"}
+        )
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert entry.options["assist"]["destination_pipelines"] == {
+            "group.test": "group-pipeline",
+            "alice": "test-pipeline",
+        }
+        # Editing the general settings preserves mappings not present in its form.
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, "receive": True}
+        )
+        result = await open_assist(hass, entry)
+        await hass.config_entries.options.async_configure(result["flow_id"], ASSIST)
+        assert (
+            entry.options["assist"]["destination_pipelines"]["alice"] == "test-pipeline"
+        )
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "assist_routes"}
+        )
+        await hass.config_entries.options.async_configure(
+            result["flow_id"], {"destination": "alice", "pipeline": ""}
+        )
+        assert entry.options["assist"]["destination_pipelines"] == {
+            "group.test": "group-pipeline"
+        }
+
+
+async def test_destination_pipeline_validation(hass, entry, api_mock):
+    with patch(CHOICES, return_value={}):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "assist_routes"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"destination": "   ", "pipeline": ""}
+        )
+        assert result["errors"]["base"] == "assist_destination_required"

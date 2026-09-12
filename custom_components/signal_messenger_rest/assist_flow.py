@@ -45,7 +45,7 @@ class AssistFlowMixin:
         settings = dict(self.config_entry.options.get("assist", {}))
         errors = {}
         if user_input is not None:
-            settings = dict(user_input)
+            settings = {**settings, **user_input}
             settings["senders"] = list(
                 dict.fromkeys(s.strip() for s in settings["senders"] if s.strip())
             )
@@ -179,6 +179,7 @@ class AssistFlowMixin:
                 "assist_status": "Refresh status",
                 "assist_clear": "Clear conversation sessions",
                 "assist": "Edit Assist settings",
+                "assist_routes": "Pipelines by destination",
                 "init": "Back to options",
             },
         )
@@ -196,6 +197,88 @@ class AssistFlowMixin:
                     vol.Required("confirm", default=False): BooleanSelector(),
                 }
             ),
+        )
+
+    async def async_step_assist_routes(self, user_input=None):
+        settings = self.config_entry.options.get("assist", {})
+        routes = settings.get("destination_pipelines", {})
+        try:
+            choices = await self.group_client.destinations(
+                self.config_entry.data["account"]
+            )
+        except SignalError:
+            choices = {}
+        for destination in self.config_entry.options.get("destinations", []):
+            choices.setdefault(
+                destination["recipient"],
+                destination.get("name", destination["recipient"]),
+            )
+        for destination in routes:
+            choices.setdefault(destination, destination)
+        pipelines = pipeline_choices(self.hass)
+        errors = {}
+        if user_input is not None:
+            destination = user_input["destination"].strip()
+            pipeline = user_input["pipeline"]
+            if not destination:
+                errors["base"] = "assist_destination_required"
+            elif pipeline and pipeline not in pipelines:
+                errors["base"] = "assist_pipeline_required"
+            elif pipeline and destination not in routes and len(routes) >= 64:
+                errors["base"] = "assist_routes_full"
+            else:
+                updated = dict(routes)
+                if pipeline:
+                    updated[destination] = pipeline
+                else:
+                    updated.pop(destination, None)
+                return self.async_create_entry(
+                    data={
+                        **self.config_entry.options,
+                        "assist": {**settings, "destination_pipelines": updated},
+                    }
+                )
+        return self.async_show_form(
+            step_id="assist_routes",
+            description_placeholders={
+                "routes": "\n\n".join(
+                    f"{choices.get(destination, destination)} → {describe_pipeline(self.hass, pipeline)[0]} ({describe_pipeline(self.hass, pipeline)[1]})"
+                    for destination, pipeline in routes.items()
+                )
+                or "No overrides. All conversations use the default pipeline."
+            },
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "destination", default=(user_input or {}).get("destination", "")
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                {"value": key, "label": value}
+                                for key, value in choices.items()
+                            ],
+                            custom_value=True,
+                        )
+                    ),
+                    vol.Required(
+                        "pipeline", default=(user_input or {}).get("pipeline", "")
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                {
+                                    "value": "",
+                                    "label": "Use default pipeline (remove override)",
+                                },
+                                *[
+                                    {"value": key, "label": value}
+                                    for key, value in pipelines.items()
+                                ],
+                            ]
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
         )
 
 

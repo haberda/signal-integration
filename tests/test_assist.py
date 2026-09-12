@@ -582,3 +582,57 @@ async def test_clear_sessions_during_run_does_not_restore_old_context(runtime):
         runtime.assist.handle(replace(MESSAGE, timestamp=1001))
         await drain(runtime)
     assert run.await_args.args[3] is None
+
+
+async def test_destination_routes_and_context_invalidation(runtime):
+    runtime.assist.settings = {
+        **ASSIST,
+        "destination_pipelines": {
+            "alice": "uuid-pipeline",
+            "+12025550101": "phone-pipeline",
+            "group.test": "group-pipeline",
+        },
+    }
+    with patch(TARGET, return_value=("ok", "session")) as run:
+        for message in [
+            MESSAGE,
+            replace(
+                MESSAGE,
+                timestamp=1001,
+                conversation_kind="group",
+                conversation_id="group.test",
+            ),
+            replace(
+                MESSAGE,
+                timestamp=1002,
+                sender_uuid="bob",
+                sender_number="+999",
+                conversation_id="bob",
+            ),
+        ]:
+            runtime.assist.handle(message)
+            await drain(runtime)
+        assert [call.args[1] for call in run.await_args_list] == [
+            "uuid-pipeline",
+            "group-pipeline",
+            "test-pipeline",
+        ]
+        runtime.assist.settings["destination_pipelines"]["alice"] = "new-pipeline"
+        runtime.assist.handle(replace(MESSAGE, timestamp=1003))
+        await drain(runtime)
+        assert run.await_args.args[1:4] == ("new-pipeline", "turn on the light", None)
+
+
+async def test_deleted_override_does_not_fall_back(runtime):
+    runtime.assist.settings = {**ASSIST, "destination_pipelines": {"alice": "deleted"}}
+    with (
+        patch(
+            "custom_components.signal_messenger_rest.assist.pipeline_signature",
+            side_effect=ValueError("unavailable"),
+        ),
+        patch(TARGET) as run,
+    ):
+        runtime.assist.handle(MESSAGE)
+        await drain(runtime)
+    run.assert_not_awaited()
+    assert runtime.assist.last_error == "pipeline_failed"

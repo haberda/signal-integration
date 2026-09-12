@@ -135,7 +135,8 @@
           "groups": "Manage Signal groups",
           "accounts": "Accounts and linked devices",
           "assist": "Assist conversations",
-          "assist_status": "Assist troubleshooting"
+          "assist_status": "Assist troubleshooting",
+          "assist_routes": "Assist pipelines by destination"
         }
       },
       "groups": {
@@ -284,7 +285,8 @@
           "assist_status": "Refresh status",
           "assist_clear": "Clear conversation sessions",
           "assist": "Edit Assist settings",
-          "init": "Back to options"
+          "init": "Back to options",
+          "assist_routes": "Pipelines by destination"
         }
       },
       "assist_clear": {
@@ -292,6 +294,14 @@
         "description": "Forget all conversation references for this Signal account. Active commands may still finish, but their context will not be retained. Queued requests start with fresh context. This does not delete conversation history held by Home Assistant or an agent/provider.",
         "data": {
           "confirm": "Clear all conversation sessions"
+        }
+      },
+      "assist_routes": {
+        "title": "Assist pipelines by destination",
+        "description": "Current overrides:\n\n{routes}\n\nChoose a direct-chat sender number/UUID or a REST group ID and its pipeline. Selecting the default removes an override. These settings do not grant Assist permission. In direct chats, a UUID override takes precedence over a phone-number override. A missing pipeline fails the request rather than falling back.",
+        "data": {
+          "destination": "Destination",
+          "pipeline": "Assist pipeline"
         }
       }
     },
@@ -311,7 +321,9 @@
       "assist_receive_required": "Enable receiving under Destinations and receiving before enabling Assist.",
       "assist_pipeline_required": "Select an available Assist pipeline. Configure an assistant in Home Assistant first.",
       "assist_senders_required": "Explicitly allow at least one sender to use Assist.",
-      "assist_invalid_prefix": "Use a prefix beginning with /, containing no whitespace, and no more than 32 characters."
+      "assist_invalid_prefix": "Use a prefix beginning with /, containing no whitespace, and no more than 32 characters.",
+      "assist_destination_required": "Enter a destination.",
+      "assist_routes_full": "At most 64 destination pipeline overrides are allowed."
     },
     "abort": {
       "group_saved": "Group change sent successfully. Reopen options to view current group details or select notification destinations. Incoming permissions are unchanged.",

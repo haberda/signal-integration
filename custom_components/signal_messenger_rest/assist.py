@@ -184,6 +184,18 @@ class SignalAssist:
         self._updated()
         return True
 
+    def pipeline_for(self, message):
+        routes = self.settings.get("destination_pipelines", {})
+        candidates = (
+            [message.conversation_id]
+            if message.conversation_kind == "group"
+            else [message.sender_uuid, message.sender_number, message.conversation_id]
+        )
+        return next(
+            (routes[key] for key in candidates if key and routes.get(key)),
+            self.settings.get("pipeline"),
+        )
+
     @property
     def status(self):
         """Content-free operational status, including disabled entries."""
@@ -196,9 +208,14 @@ class SignalAssist:
         if not self.coordinator.last_update_success or not self.coordinator.connected:
             return "disconnected"
         try:
-            if (
-                pipeline_signature(self.coordinator.hass, self.settings.get("pipeline"))
-                is None
+            pipelines = {
+                self.settings.get("pipeline"),
+                *self.settings.get("destination_pipelines", {}).values(),
+            }
+            if any(
+                not pipeline
+                or pipeline_signature(self.coordinator.hass, pipeline) is None
+                for pipeline in pipelines
             ):
                 return "pipeline_unavailable"
         except Exception:
@@ -306,8 +323,12 @@ class SignalAssist:
                 reply = "Send a command after the Assist prefix. Use /reset to start a new conversation."
             else:
                 try:
-                    signature = pipeline_signature(
-                        self.coordinator.hass, self.settings["pipeline"]
+                    pipeline_id = self.pipeline_for(message)
+                    if not pipeline_id:
+                        raise AssistError("No pipeline selected")
+                    signature = (
+                        pipeline_id,
+                        pipeline_signature(self.coordinator.hass, pipeline_id),
                     )
                     if session and session[2] != signature:
                         # A pending HA follow-up can otherwise override the newly
@@ -316,7 +337,7 @@ class SignalAssist:
                     async with asyncio.timeout(RUN_TIMEOUT):
                         reply, conversation_id = await run_text(
                             self.coordinator.hass,
-                            self.settings["pipeline"],
+                            pipeline_id,
                             text,
                             conversation_id,
                             on_route=self.last_route.update,

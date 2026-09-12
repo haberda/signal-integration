@@ -455,6 +455,7 @@ class SignalOptionsFlow(
                 "accounts": "Accounts and linked devices",
                 "assist": "Assist conversations",
                 "assist_status": "Assist troubleshooting",
+                "assist_routes": "Assist pipelines by destination",
             },
         )
 
