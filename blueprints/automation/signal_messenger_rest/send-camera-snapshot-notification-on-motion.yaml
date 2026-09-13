@@ -1,0 +1,164 @@
+blueprint:
+  name: Signal - camera snapshot or recording on motion
+  description: >-
+    Capture a snapshot or MP4 clip when motion starts and send it as a Signal
+    attachment. Select a Signal account and recipient numbers, UUIDs or REST group
+    IDs. Video requires a camera that supports camera.record and the stream
+    integration. Create the output directory and add it to
+    allowlist_external_dirs first. Files must be under 10 MiB; use short clips
+    or a lower-bitrate camera stream. Captures remain on disk; arrange cleanup.
+    Import this blueprint separately from the integration. Existing automations
+    using the old notify_service input must be reconfigured.
+  domain: automation
+  input:
+    motion_sensor:
+      name: Motion sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    camera:
+      name: Camera
+      selector:
+        entity:
+          domain: camera
+    account:
+      name: Signal account
+      selector:
+        config_entry:
+          integration: signal_messenger_rest
+    recipients:
+      name: Signal recipients
+      description: Phone numbers with country codes, UUIDs or REST group IDs.
+      selector:
+        text:
+          multiple: true
+    capture_mode:
+      name: Capture type
+      default: snapshot
+      selector:
+        select:
+          options:
+            - label: Snapshot (JPEG)
+              value: snapshot
+            - label: Video recording (MP4)
+              value: recording
+    recording_duration:
+      name: Recording duration
+      description: Requested clip length. Actual duration depends on stream segments.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    recording_lookback:
+      name: Recording lookback
+      description: Include buffered footage when available; requires an already active stream.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    output_directory:
+      name: Capture directory
+      description: Existing directory inside Home Assistant, allowed by allowlist_external_dirs.
+      default: /tmp
+      selector:
+        text:
+    notification_title:
+      name: Notification title
+      default: Motion detected!
+      selector:
+        text:
+    notification_message:
+      name: Notification message
+      default: "{{ motion_sensor_name }} detected movement!"
+      selector:
+        template:
+    state_entity:
+      name: Blocking entities
+      description: Every selected entity must be off. Leave empty to disable filtering.
+      default: []
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - input_boolean
+          multiple: true
+    delay:
+      name: Capture delay
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: seconds
+          mode: slider
+    cooldown:
+      name: Cooldown
+      description: Wait after sending before accepting another motion event.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 1
+          unit_of_measurement: seconds
+          mode: slider
+mode: single
+max_exceeded: silent
+triggers:
+  - trigger: state
+    entity_id: !input motion_sensor
+    from: "off"
+    to: "on"
+variables:
+  motion_sensor: !input motion_sensor
+  motion_sensor_name: "{{ state_attr(motion_sensor, 'friendly_name') or motion_sensor }}"
+  camera_entity: !input camera
+  capture_mode: !input capture_mode
+  output_directory: !input output_directory
+  blocking_entities: !input state_entity
+conditions:
+  - condition: template
+    value_template: >-
+      {{ expand(blocking_entities) | selectattr('state', 'eq', 'off') | list | count
+         == blocking_entities | count }}
+actions:
+  - delay:
+      seconds: !input delay
+  - variables:
+      capture_file: >-
+        {{ output_directory.rstrip('/') }}/signal_{{ camera_entity.split('.')[1] }}_{{ now().strftime('%Y%m%d_%H%M%S_%f') }}_{{ this.entity_id.split('.')[1] }}.{{ 'mp4' if capture_mode == 'recording' else 'jpg' }}
+  - choose:
+      - conditions: "{{ capture_mode == 'recording' }}"
+        sequence:
+          - action: camera.record
+            target:
+              entity_id: !input camera
+            data:
+              filename: "{{ capture_file }}"
+              duration: !input recording_duration
+              lookback: !input recording_lookback
+    default:
+      - action: camera.snapshot
+        target:
+          entity_id: !input camera
+        data:
+          filename: "{{ capture_file }}"
+  - action: signal_messenger_rest.send_message
+    data:
+      config_entry_id: !input account
+      recipients: !input recipients
+      message: !input notification_message
+      title: !input notification_title
+      attachments:
+        - "{{ capture_file }}"
+  - delay:
+      seconds: !input cooldown

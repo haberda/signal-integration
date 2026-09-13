@@ -296,6 +296,22 @@ After verifying sending, remove the old YAML notifier. Before enabling receiving
 
 Before a public release, validate these cases on a linked test account: direct/group/self sending; a local and URL attachment; a quoted reply to direct/group messages; two identical incoming texts; a sender without a phone number; unauthorized sender/group filtering; backend restart; HA restart/reload; a backend mode change; account unlinking; send timeout and partial failure. Check add-on and standalone deployments independently. Verify production/edge discovery, both add-ons running, manual fallback, and group creation/settings/membership/admin/leave changes with a test group. Validate QR scanning and approval, account discovery, QR expiry/replacement, multiple accounts, and device listing/addition/removal on both primary and companion backends. Never send real messages from automated CI.
 
+### Camera snapshots and recordings on motion
+
+Import the [camera motion blueprint](blueprints/automation/signal_messenger_rest/send-camera-snapshot-notification-on-motion.yaml) separately into Home Assistant. Select the motion sensor, camera, Signal account and recipient numbers/UUIDs/group IDs, then choose **Snapshot** or **Video recording**. It uses `signal_messenger_rest.send_message` with top-level attachments; `notify.send_message` does not accept attachments.
+
+The default output directory is `/tmp`. Add the chosen existing directory to Home Assistant's configuration and restart after changing it:
+
+```yaml
+homeassistant:
+  allowlist_external_dirs:
+    - /tmp
+```
+
+Merge this into any existing `homeassistant:` section. Video uses [camera.record](https://www.home-assistant.io/integrations/camera/), which requires a supported camera stream and the stream integration. Set clip duration (default 10 seconds) and optional lookback; lookback depends on an already buffered stream. The send runs after recording completes. The integration's 10 MiB per-file limit applies, so high-bitrate clips may need a shorter duration or lower-quality stream.
+
+Blocking entities are optional; all selected entities must be off. Motion during capture/sending/cooldown is ignored. Unique capture files remain in the selected directory; arrange periodic cleanup. Restarting/reloading the automation interrupts its run. Existing instances of the original blueprint must replace `notify_service` with the new **Signal account** and **Signal recipients** inputs.
+
 ### Read receipts
 
 Enable **Send read receipts** under **Configure → Destinations and receiving**, with receiving enabled, to tell senders when the integration reads their messages. The option defaults to off.

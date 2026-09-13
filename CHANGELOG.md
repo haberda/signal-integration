@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+
+- Update the motion camera blueprint to send attachments with the integration's rich send action.
+- Add selectable JPEG snapshots or MP4 recordings, clip duration/lookback, output directory and optional blocking entities.
+- Validate both capture branches by executing their Home Assistant scripts with mocked services.
+
 ## 0.6.0
 
 - Add an Assist troubleshooting screen with pipeline/agent information and safe clearing of conversation references.
