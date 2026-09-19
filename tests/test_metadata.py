@@ -100,7 +100,7 @@ async def test_options_translations_loaded_by_home_assistant(hass):
     assert translations[prefix + "assist.data.pipeline"] == "Assist pipeline"
 
 
-@pytest.mark.parametrize("capture_mode", ["snapshot", "recording"])
+@pytest.mark.parametrize("capture_mode", ["snapshot", "recording", "both"])
 async def test_camera_blueprint_actions(hass, capture_mode):
     from homeassistant.core import Context, State
     from homeassistant.helpers.script import Script
@@ -108,7 +108,7 @@ async def test_camera_blueprint_actions(hass, capture_mode):
     data = load_yaml(
         str(
             ROOT
-            / "blueprints/automation/signal_messenger_rest/send-camera-snapshot-notification-on-motion.yaml"
+            / "blueprints/automation/signal_messenger_rest/send-camera-snapshot-to-signal-on-motion.yaml"
         )
     )
     blueprint = Blueprint(
@@ -155,16 +155,23 @@ async def test_camera_blueprint_actions(hass, capture_mode):
         },
         context=Context(),
     )
+    modes = ["snapshot", "recording"] if capture_mode == "both" else [capture_mode]
     assert [name for name, _ in calls] == [
-        "record" if capture_mode == "recording" else "snapshot",
-        "send_message",
+        action
+        for mode in modes
+        for action in ["record" if mode == "recording" else "snapshot", "send_message"]
     ]
-    filename = calls[0][1]["filename"]
-    assert filename.endswith(".mp4" if capture_mode == "recording" else ".jpg")
-    assert calls[1][1]["attachments"] == [filename]
-    assert calls[1][1]["config_entry_id"] == "signal-entry"
-    assert calls[1][1]["recipients"] == ["group.test"]
-    assert calls[1][1]["message"] == "Driveway motion detected movement!"
-    if capture_mode == "recording":
-        assert calls[0][1]["duration"] == 10
-        assert calls[0][1]["lookback"] == 0
+    for index, mode in enumerate(modes):
+        capture_data = calls[index * 2][1]
+        send_data = calls[index * 2 + 1][1]
+        filename = capture_data["filename"]
+        assert filename.endswith(".mp4" if mode == "recording" else ".jpg")
+        assert send_data["attachments"] == [filename]
+        assert send_data["config_entry_id"] == "signal-entry"
+        assert send_data["recipients"] == ["group.test"]
+        assert send_data["message"] == "Driveway motion detected movement!"
+        if mode == "recording":
+            assert capture_data["duration"] == 10
+            assert capture_data["lookback"] == 0
+    if capture_mode == "both":
+        assert calls[0][1]["filename"] != calls[2][1]["filename"]

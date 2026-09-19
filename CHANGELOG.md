@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add a snapshot-then-video mode to the motion blueprint, retaining snapshot-only and video-only modes.
+- Use the renamed camera blueprint filename in documentation and tests.
+
 ## 0.6.1
 
 - Update the motion camera blueprint to send attachments with the integration's rich send action.

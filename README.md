@@ -298,7 +298,7 @@ Before a public release, validate these cases on a linked test account: direct/g
 
 ### Camera snapshots and recordings on motion
 
-Import the [camera motion blueprint](blueprints/automation/signal_messenger_rest/send-camera-snapshot-notification-on-motion.yaml) separately into Home Assistant. Select the motion sensor, camera, Signal account and recipient numbers/UUIDs/group IDs, then choose **Snapshot** or **Video recording**. It uses `signal_messenger_rest.send_message` with top-level attachments; `notify.send_message` does not accept attachments.
+Import the [camera motion blueprint](blueprints/automation/signal_messenger_rest/send-camera-snapshot-to-signal-on-motion.yaml) separately into Home Assistant. Select the motion sensor, camera, Signal account and recipient numbers/UUIDs/group IDs, then choose **Snapshot**, **Video recording**, or **Snapshot, then video (both)**. Both mode sends two messages: the snapshot first, then a video after recording finishes. Cooldown starts after the second send. It uses `signal_messenger_rest.send_message` with top-level attachments; `notify.send_message` does not accept attachments.
 
 The default output directory is `/tmp`. Add the chosen existing directory to Home Assistant's configuration and restart after changing it:
 

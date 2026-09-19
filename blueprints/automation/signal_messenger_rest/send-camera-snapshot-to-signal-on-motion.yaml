@@ -1,8 +1,8 @@
 blueprint:
-  name: Signal - camera snapshot or recording on motion
+  name: Signal - camera snapshot, recording, or both on motion
   description: >-
-    Capture a snapshot or MP4 clip when motion starts and send it as a Signal
-    attachment. Select a Signal account and recipient numbers, UUIDs or REST group
+    Capture a snapshot, MP4 clip, or both when motion starts. In both mode,
+    send the snapshot first, then record and send the clip as a second message. Select a Signal account and recipient numbers, UUIDs or REST group
     IDs. Video requires a camera that supports camera.record and the stream
     integration. Create the output directory and add it to
     allowlist_external_dirs first. Files must be under 10 MiB; use short clips
@@ -42,6 +42,8 @@ blueprint:
               value: snapshot
             - label: Video recording (MP4)
               value: recording
+            - label: Snapshot, then video (both)
+              value: both
     recording_duration:
       name: Recording duration
       description: Requested clip length. Actual duration depends on stream segments.
@@ -133,32 +135,35 @@ conditions:
 actions:
   - delay:
       seconds: !input delay
-  - variables:
-      capture_file: >-
-        {{ output_directory.rstrip('/') }}/signal_{{ camera_entity.split('.')[1] }}_{{ now().strftime('%Y%m%d_%H%M%S_%f') }}_{{ this.entity_id.split('.')[1] }}.{{ 'mp4' if capture_mode == 'recording' else 'jpg' }}
-  - choose:
-      - conditions: "{{ capture_mode == 'recording' }}"
-        sequence:
-          - action: camera.record
-            target:
-              entity_id: !input camera
+  - repeat:
+      for_each: "{{ ['snapshot', 'recording'] if capture_mode == 'both' else [capture_mode] }}"
+      sequence:
+          - variables:
+              capture_file: >-
+                {{ output_directory.rstrip('/') }}/signal_{{ camera_entity.split('.')[1] }}_{{ now().strftime('%Y%m%d_%H%M%S_%f') }}_{{ this.entity_id.split('.')[1] }}.{{ 'mp4' if repeat.item == 'recording' else 'jpg' }}
+          - choose:
+              - conditions: "{{ repeat.item == 'recording' }}"
+                sequence:
+                  - action: camera.record
+                    target:
+                      entity_id: !input camera
+                    data:
+                      filename: "{{ capture_file }}"
+                      duration: !input recording_duration
+                      lookback: !input recording_lookback
+            default:
+              - action: camera.snapshot
+                target:
+                  entity_id: !input camera
+                data:
+                  filename: "{{ capture_file }}"
+          - action: signal_messenger_rest.send_message
             data:
-              filename: "{{ capture_file }}"
-              duration: !input recording_duration
-              lookback: !input recording_lookback
-    default:
-      - action: camera.snapshot
-        target:
-          entity_id: !input camera
-        data:
-          filename: "{{ capture_file }}"
-  - action: signal_messenger_rest.send_message
-    data:
-      config_entry_id: !input account
-      recipients: !input recipients
-      message: !input notification_message
-      title: !input notification_title
-      attachments:
-        - "{{ capture_file }}"
+              config_entry_id: !input account
+              recipients: !input recipients
+              message: !input notification_message
+              title: !input notification_title
+              attachments:
+                - "{{ capture_file }}"
   - delay:
       seconds: !input cooldown
