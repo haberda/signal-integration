@@ -4,7 +4,7 @@ ruff==0.16.7
 # Home Assistant 2026.9.1 Assist dependencies for real pipeline tests.
 gazetteer-matcher==1.1.0
 hassil==3.12.0
-home-assistant-intents==2026.8.28
+home-assistant-intents==2026.9.17
 pymicro-vad==1.0.1
 pyspeex-noise==1.0.2
 mutagen==1.48.1
