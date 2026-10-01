@@ -1,4 +1,4 @@
-pytest-homeassistant-custom-component==0.13.364
+pytest-homeassistant-custom-component==0.13.367
 pytest-aiohttp==1.1.1
 ruff==0.16.7
 # Home Assistant 2026.9.1 Assist dependencies for real pipeline tests.
