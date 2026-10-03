@@ -93,6 +93,8 @@ Authorized incoming messages emit `signal_messenger_rest_message_received`. Key 
 
 Incoming attachment files are not downloaded by this integration. Sync echoes and typing/receipt events do not trigger message automations.
 
+For exact-command replies alongside Assist, use prefix-based Assist activation and a separate command such as `/status`. In all-direct-messages mode, Assist normally consumes the command before an event is published; enabling event publishing can produce two replies. The reply blueprint needs event permissions, not just Assist permissions.
+
 Import the [reply blueprint](blueprints/automation/signal_messenger_rest/reply.yaml) to respond to an exact command, or write an automation:
 
 ```yaml
@@ -131,7 +133,7 @@ data:
 response_variable: alert_result
 ```
 
-Receiving must be enabled. Use a phone number, UUID or REST group ID, not a username. If reactions hide the sending account's number, set `account_author` to that account's UUID. The response includes `acknowledged`, `reason` and the original `timestamp`. Reload/restart cancels pending alerts.
+Receiving must be enabled. Use a phone number, UUID or REST group ID, not a username. If reactions hide the sending account's number, set `account_author` to that account's UUID. The response includes `acknowledged`, `reason` and the original `timestamp`. The sensor turning off cancels its wait. Unknown/unavailable states leave it running; returning to on starts a fresh alert. Reload/restart cancels pending alerts.
 
 ### Read receipts
 
@@ -149,7 +151,7 @@ Create and allow the capture directory using `allowlist_external_dirs` as shown 
 
 Video requires a camera supporting `camera.record` and Home Assistant's stream integration. Default duration is 10 seconds; optional lookback uses footage already buffered by an active stream. Keep clips below **10 MiB** by reducing duration or stream bitrate.
 
-All selected blocking entities must be off; leave the list empty to disable filtering. Motion during capture, sending and cooldown is ignored. Captures remain on disk, so arrange cleanup. Older blueprint instances using `notify_service` need the new account and recipient inputs.
+All selected blocking entities must be off; leave the list empty to disable filtering. Blockers are rechecked before each capture and send, including after the capture delay. A capture or send already in progress cannot be recalled. Motion during capture, sending and cooldown is ignored. Capture/send errors are recorded in automation traces; failed attempts still reach cooldown. In both mode, a snapshot failure does not prevent the video attempt, provided blockers remain off. Failed captures skip their send. Captures remain on disk, so arrange cleanup. Older blueprint instances using `notify_service` need the new account and recipient inputs. If an existing automation references `send-camera-snapshot-notification-on-motion.yaml`, reimport the renamed `send-camera-snapshot-to-signal-on-motion.yaml` and update its `use_blueprint.path` (or recreate the automation). Reimport updated blueprints and reload automations to apply these changes.
 
 HACS does not install blueprints automatically. Import their GitHub URLs or copy them to your HA `blueprints/automation/signal_messenger_rest/` directory.
 

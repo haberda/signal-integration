@@ -147,6 +147,7 @@ async def test_camera_blueprint_actions(hass, capture_mode):
     script = Script(hass, config["actions"], "camera test", "test")
     await script.async_run(
         {
+            "blocking_entities": [],
             "camera_entity": "camera.driveway",
             "capture_mode": capture_mode,
             "output_directory": "/tmp",

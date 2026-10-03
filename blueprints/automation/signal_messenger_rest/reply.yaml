@@ -2,7 +2,11 @@ blueprint:
   name: Signal - reply to an authorized command
   description: >-
     Match an exact incoming command and reply in the same conversation.
-    Configure allowed senders and groups in the integration options first.
+    Enable receiving and configure event sender/group permissions first;
+    Assist permissions alone do not enable this blueprint. Use Assist's prefix
+    activation with a separate command such as /status. If Assist handles all
+    direct messages, it normally consumes these commands; publishing handled
+    messages as events can cause both Assist and this automation to reply.
     The response template can read Home Assistant states. Incoming message text
     is never evaluated as a template or service name.
   domain: automation
@@ -28,14 +32,19 @@ triggers:
     event_data:
       config_entry_id: !input account
       text: !input command
+variables:
+  response: !input response
 conditions: []
 actions:
   - action: signal_messenger_rest.send_message
-    data:
-      config_entry_id: "{{ trigger.event.data.config_entry_id }}"
-      recipients: "{{ [trigger.event.data.conversation_id] }}"
-      message: !input response
-      quote_timestamp: "{{ trigger.event.data.timestamp }}"
-      quote_author: "{{ trigger.event.data.sender_uuid or trigger.event.data.sender_number }}"
+    # Render the mapping together to preserve a phone author's leading "+".
+    data: >-
+      {{ dict(
+          config_entry_id=trigger.event.data.config_entry_id,
+          recipients=[trigger.event.data.conversation_id],
+          message=response,
+          quote_timestamp=trigger.event.data.timestamp,
+          quote_author=trigger.event.data.sender_uuid or trigger.event.data.sender_number
+      ) }}
 mode: queued
 max: 10

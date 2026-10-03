@@ -4,7 +4,9 @@ blueprint:
     When a binary sensor turns on, send an alert and quote it in reminders until
     an approved person reacts to the ORIGINAL message with the selected emoji,
     the sensor turns off, or the expiry elapses. Receiving and sender/group
-    permissions must be configured first. HA restart/reload cancels pending alerts.
+    event permissions must be configured first; Assist permissions alone are
+    insufficient. Off cancels the wait; unknown/unavailable does not. Returning
+    to on starts a new alert. HA restart/reload cancels pending alerts.
   domain: automation
   input:
     account:

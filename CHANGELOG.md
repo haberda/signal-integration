@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Recheck camera blockers before captures and sends; preserve cooldown after runtime failures and let video proceed after a failed snapshot.
+- Preserve phone-number quote authors in command replies.
+- Clarify Assist/event permissions, alert unavailable-state behavior and camera blueprint migration.
+- Exercise blueprint triggers, failure paths, blocking changes and acknowledgment cancellation with Home Assistant automation tests.
+
 - Add a snapshot-then-video mode to the motion blueprint, retaining snapshot-only and video-only modes.
 - Use the renamed camera blueprint filename in documentation and tests.
 

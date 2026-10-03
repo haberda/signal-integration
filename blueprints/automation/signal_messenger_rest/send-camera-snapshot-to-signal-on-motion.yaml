@@ -84,7 +84,7 @@ blueprint:
         template:
     state_entity:
       name: Blocking entities
-      description: Every selected entity must be off. Leave empty to disable filtering.
+      description: Every selected entity must be off before each capture and send. Leave empty to disable filtering. In-progress captures/sends cannot be recalled.
       default: []
       selector:
         entity:
@@ -104,7 +104,7 @@ blueprint:
           mode: slider
     cooldown:
       name: Cooldown
-      description: Wait after sending before accepting another motion event.
+      description: Wait after the capture attempts, including failures or blocked steps, before accepting another motion event.
       default: 30
       selector:
         number:
@@ -138,32 +138,44 @@ actions:
   - repeat:
       for_each: "{{ ['snapshot', 'recording'] if capture_mode == 'both' else [capture_mode] }}"
       sequence:
-          - variables:
-              capture_file: >-
-                {{ output_directory.rstrip('/') }}/signal_{{ camera_entity.split('.')[1] }}_{{ now().strftime('%Y%m%d_%H%M%S_%f') }}_{{ this.entity_id.split('.')[1] }}.{{ 'mp4' if repeat.item == 'recording' else 'jpg' }}
-          - choose:
-              - conditions: "{{ repeat.item == 'recording' }}"
-                sequence:
-                  - action: camera.record
-                    target:
-                      entity_id: !input camera
-                    data:
-                      filename: "{{ capture_file }}"
-                      duration: !input recording_duration
-                      lookback: !input recording_lookback
-            default:
-              - action: camera.snapshot
-                target:
-                  entity_id: !input camera
-                data:
-                  filename: "{{ capture_file }}"
-          - action: signal_messenger_rest.send_message
-            data:
-              config_entry_id: !input account
-              recipients: !input recipients
-              message: !input notification_message
-              title: !input notification_title
-              attachments:
-                - "{{ capture_file }}"
+        # Isolate each attempt: a failed snapshot must not prevent the clip.
+        # A failed capture exits this sequence before its send; cooldown still runs.
+        - sequence:
+            - condition: template
+              value_template: >-
+                {{ expand(blocking_entities) | selectattr('state', 'eq', 'off') | list | count
+                   == blocking_entities | count }}
+            - variables:
+                capture_file: >-
+                  {{ output_directory.rstrip('/') }}/signal_{{ camera_entity.split('.')[1] }}_{{ now().strftime('%Y%m%d_%H%M%S_%f') }}_{{ this.entity_id.split('.')[1] }}.{{ 'mp4' if repeat.item == 'recording' else 'jpg' }}
+            - choose:
+                - conditions: "{{ repeat.item == 'recording' }}"
+                  sequence:
+                    - action: camera.record
+                      target:
+                        entity_id: !input camera
+                      data:
+                        filename: "{{ capture_file }}"
+                        duration: !input recording_duration
+                        lookback: !input recording_lookback
+              default:
+                - action: camera.snapshot
+                  target:
+                    entity_id: !input camera
+                  data:
+                    filename: "{{ capture_file }}"
+            - condition: template
+              value_template: >-
+                {{ expand(blocking_entities) | selectattr('state', 'eq', 'off') | list | count
+                   == blocking_entities | count }}
+            - action: signal_messenger_rest.send_message
+              data:
+                config_entry_id: !input account
+                recipients: !input recipients
+                message: !input notification_message
+                title: !input notification_title
+                attachments:
+                  - "{{ capture_file }}"
+          continue_on_error: true
   - delay:
       seconds: !input cooldown
