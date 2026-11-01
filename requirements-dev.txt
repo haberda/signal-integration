@@ -5,7 +5,7 @@ ruff==0.16.7
 gazetteer-matcher==1.1.0
 hassil==3.12.0
 home-assistant-intents==2026.8.28
-pymicro-vad==1.0.1
+pymicro-vad==2.1.0
 pyspeex-noise==1.0.2
 mutagen==1.48.1
 ha-ffmpeg==3.2.2
