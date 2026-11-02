@@ -17,26 +17,8 @@ from custom_components.signal_messenger_rest.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 
-from .test_config_flow import CONNECTION, SETTINGS
+from .test_config_flow import CONNECTION
 from .test_models import RAW
-
-
-@pytest.fixture
-def entry(hass):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Signal test",
-        data={**CONNECTION, "account": "+12025550100"},
-        options={
-            **SETTINGS,
-            "destinations": [
-                {"id": "alice", "recipient": "+12025550101", "name": "Alice"},
-                {"id": "group", "recipient": "group.test", "name": "Household"},
-            ],
-        },
-    )
-    entry.add_to_hass(hass)
-    return entry
 
 
 async def test_entities_sending_and_unload(hass, entry, api_mock):
@@ -278,4 +260,41 @@ async def test_rich_send_local_attachment_and_self(hass, entry, api_mock, tmp_pa
         ]
         assert send.call_args.kwargs["text_mode"] == "styled"
         assert send.call_args.kwargs["quote_message"] == "Original"
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_destination_name_drives_entity_name_and_initial_id(
+    hass, entry, api_mock
+):
+    destination = {**entry.options["destinations"][0], "name": "Family alerts"}
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "destinations": [destination]}
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "notify", DOMAIN, f"{entry.entry_id}_alice"
+    )
+    assert entity_id == "notify.signal_test_family_alerts"
+    assert (
+        hass.states.get(entity_id).attributes["friendly_name"]
+        == "Signal test Family alerts"
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            "destinations": [{**destination, "name": "Home alerts"}],
+        },
+    )
+    await hass.async_block_till_done()
+    assert (
+        registry.async_get_entity_id("notify", DOMAIN, f"{entry.entry_id}_alice")
+        == entity_id
+    )
+    assert (
+        hass.states.get(entity_id).attributes["friendly_name"]
+        == "Signal test Home alerts"
+    )
     await hass.config_entries.async_unload(entry.entry_id)

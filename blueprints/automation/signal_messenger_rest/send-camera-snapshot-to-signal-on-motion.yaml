@@ -1,0 +1,181 @@
+blueprint:
+  name: Signal - camera snapshot, recording, or both on motion
+  description: >-
+    Capture a snapshot, MP4 clip, or both when motion starts. In both mode,
+    send the snapshot first, then record and send the clip as a second message. Select a Signal account and recipient numbers, UUIDs or REST group
+    IDs. Video requires a camera that supports camera.record and the stream
+    integration. Create the output directory and add it to
+    allowlist_external_dirs first. Files must be under 10 MiB; use short clips
+    or a lower-bitrate camera stream. Captures remain on disk; arrange cleanup.
+    Import this blueprint separately from the integration. Existing automations
+    using the old notify_service input must be reconfigured.
+  domain: automation
+  input:
+    motion_sensor:
+      name: Motion sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    camera:
+      name: Camera
+      selector:
+        entity:
+          domain: camera
+    account:
+      name: Signal account
+      selector:
+        config_entry:
+          integration: signal_messenger_rest
+    recipients:
+      name: Signal recipients
+      description: Phone numbers with country codes, UUIDs or REST group IDs.
+      selector:
+        text:
+          multiple: true
+    capture_mode:
+      name: Capture type
+      default: snapshot
+      selector:
+        select:
+          options:
+            - label: Snapshot (JPEG)
+              value: snapshot
+            - label: Video recording (MP4)
+              value: recording
+            - label: Snapshot, then video (both)
+              value: both
+    recording_duration:
+      name: Recording duration
+      description: Requested clip length. Actual duration depends on stream segments.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    recording_lookback:
+      name: Recording lookback
+      description: Include buffered footage when available; requires an already active stream.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    output_directory:
+      name: Capture directory
+      description: Existing directory inside Home Assistant, allowed by allowlist_external_dirs.
+      default: /tmp
+      selector:
+        text:
+    notification_title:
+      name: Notification title
+      default: Motion detected!
+      selector:
+        text:
+    notification_message:
+      name: Notification message
+      default: "{{ motion_sensor_name }} detected movement!"
+      selector:
+        template:
+    state_entity:
+      name: Blocking entities
+      description: Every selected entity must be off before each capture and send. Leave empty to disable filtering. In-progress captures/sends cannot be recalled.
+      default: []
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - input_boolean
+          multiple: true
+    delay:
+      name: Capture delay
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: seconds
+          mode: slider
+    cooldown:
+      name: Cooldown
+      description: Wait after the capture attempts, including failures or blocked steps, before accepting another motion event.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 1
+          unit_of_measurement: seconds
+          mode: slider
+mode: single
+max_exceeded: silent
+triggers:
+  - trigger: state
+    entity_id: !input motion_sensor
+    from: "off"
+    to: "on"
+variables:
+  motion_sensor: !input motion_sensor
+  motion_sensor_name: "{{ state_attr(motion_sensor, 'friendly_name') or motion_sensor }}"
+  camera_entity: !input camera
+  capture_mode: !input capture_mode
+  output_directory: !input output_directory
+  blocking_entities: !input state_entity
+conditions:
+  - condition: template
+    value_template: >-
+      {{ expand(blocking_entities) | selectattr('state', 'eq', 'off') | list | count
+         == blocking_entities | count }}
+actions:
+  - delay:
+      seconds: !input delay
+  - repeat:
+      for_each: "{{ ['snapshot', 'recording'] if capture_mode == 'both' else [capture_mode] }}"
+      sequence:
+        # Isolate each attempt: a failed snapshot must not prevent the clip.
+        # A failed capture exits this sequence before its send; cooldown still runs.
+        - sequence:
+            - condition: template
+              value_template: >-
+                {{ expand(blocking_entities) | selectattr('state', 'eq', 'off') | list | count
+                   == blocking_entities | count }}
+            - variables:
+                capture_file: >-
+                  {{ output_directory.rstrip('/') }}/signal_{{ camera_entity.split('.')[1] }}_{{ now().strftime('%Y%m%d_%H%M%S_%f') }}_{{ this.entity_id.split('.')[1] }}.{{ 'mp4' if repeat.item == 'recording' else 'jpg' }}
+            - choose:
+                - conditions: "{{ repeat.item == 'recording' }}"
+                  sequence:
+                    - action: camera.record
+                      target:
+                        entity_id: !input camera
+                      data:
+                        filename: "{{ capture_file }}"
+                        duration: !input recording_duration
+                        lookback: !input recording_lookback
+              default:
+                - action: camera.snapshot
+                  target:
+                    entity_id: !input camera
+                  data:
+                    filename: "{{ capture_file }}"
+            - condition: template
+              value_template: >-
+                {{ expand(blocking_entities) | selectattr('state', 'eq', 'off') | list | count
+                   == blocking_entities | count }}
+            - action: signal_messenger_rest.send_message
+              data:
+                config_entry_id: !input account
+                recipients: !input recipients
+                message: !input notification_message
+                title: !input notification_title
+                attachments:
+                  - "{{ capture_file }}"
+          continue_on_error: true
+  - delay:
+      seconds: !input cooldown

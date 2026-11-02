@@ -12,9 +12,19 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import InvalidAuth, SignalClient, SignalError
+from .assist import SignalAssist
 from .attachments import encode_attachments
-from .const import CONF_ACCOUNT, CONF_GROUPS, CONF_SENDERS, DOMAIN, EVENT_MESSAGE, MODES
-from .models import Message
+from .const import (
+    CONF_ACCOUNT,
+    CONF_GROUPS,
+    CONF_SENDERS,
+    DOMAIN,
+    EVENT_MESSAGE,
+    EVENT_REACTION,
+    MODES,
+)
+from .models import IncomingEvent, Reaction
+from .receipts import ReadReceipts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,12 +44,16 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         self.client = client
         self.account = entry.data[CONF_ACCOUNT]
         self.data = about
+        self.filtered_events = 0
         self.connected = False
         self.last_received = None
         self.last_sent = None
         self.receiver = None
         self.receiver_task = None
         self.send_lock = asyncio.Lock()
+        self.alert_tasks: set[asyncio.Task] = set()
+        self.assist = SignalAssist(self)
+        self.receipts = ReadReceipts(self)
 
     @property
     def message_signal(self) -> str:
@@ -73,22 +87,37 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         self.entry.async_start_reauth(self.hass)
 
     @callback
-    def receive_message(self, message: Message) -> None:
+    def receive_message(self, message: IncomingEvent) -> None:
         options = self.entry.options
-        if not message.allowed(
+        handled = self.assist.handle(message)
+        event_allowed = message.allowed(
             options.get(CONF_SENDERS, []), options.get(CONF_GROUPS, [])
-        ):
+        )
+        if not event_allowed and not handled:
+            self.filtered_events += 1
             return
+        self.receipts.handle(message)
         self.last_received = dt_util.utcnow()
+        if not event_allowed or (
+            handled and not options.get("assist", {}).get("publish_events", False)
+        ):
+            self.async_update_listeners()
+            return
         self.hass.bus.async_fire(
-            EVENT_MESSAGE,
+            EVENT_REACTION if isinstance(message, Reaction) else EVENT_MESSAGE,
             {
                 **message.payload(),
                 "config_entry_id": self.entry.entry_id,
                 "received_at": self.last_received.isoformat(),
             },
         )
-        async_dispatcher_send(self.hass, self.message_signal)
+        async_dispatcher_send(
+            self.hass,
+            self.message_signal,
+            "reaction_received"
+            if isinstance(message, Reaction)
+            else "message_received",
+        )
         self.async_update_listeners()
 
     async def send_message(
@@ -168,3 +197,29 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
                     )
             self.async_update_listeners()
         return {"success": all(r["success"] for r in results), "results": results}
+
+    async def react(
+        self,
+        recipient: str,
+        target_author: str,
+        timestamp: int,
+        emoji: str = "",
+        *,
+        remove: bool = False,
+    ) -> None:
+        try:
+            await self.client.react(
+                self.account, recipient, target_author, timestamp, emoji, remove=remove
+            )
+        except InvalidAuth:
+            self.auth_failed()
+            raise ServiceValidationError("API authentication failed") from None
+        except SignalError as err:
+            raise ServiceValidationError(str(err)) from None
+
+    async def stop_alerts(self) -> None:
+        tasks = list(self.alert_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)

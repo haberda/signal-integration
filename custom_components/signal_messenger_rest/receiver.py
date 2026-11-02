@@ -6,7 +6,7 @@ from collections.abc import Callable
 from random import uniform
 
 from .api import InvalidAuth, SignalClient, SignalError
-from .models import Message, normalize_message
+from .models import IncomingEvent, normalize_event
 
 
 class Receiver:
@@ -15,7 +15,7 @@ class Receiver:
         client: SignalClient,
         account: str,
         interval: int,
-        message_callback: Callable[[Message], None],
+        message_callback: Callable[[IncomingEvent], None],
         status_callback: Callable[[bool], None],
         auth_callback: Callable[[], None],
     ):
@@ -30,7 +30,7 @@ class Receiver:
         self.ignored = 0
 
     def dispatch(self, raw) -> None:
-        message = normalize_message(raw, self.account)
+        message = normalize_event(raw, self.account)
         if message is None:
             self.ignored += 1
             return

@@ -1,5 +1,106 @@
 # Changelog
 
+## Unreleased
+
+- Recheck camera blockers before captures and sends; preserve cooldown after runtime failures and let video proceed after a failed snapshot.
+- Preserve phone-number quote authors in command replies.
+- Clarify Assist/event permissions, alert unavailable-state behavior and camera blueprint migration.
+- Exercise blueprint triggers, failure paths, blocking changes and acknowledgment cancellation with Home Assistant automation tests.
+
+- Add a snapshot-then-video mode to the motion blueprint, retaining snapshot-only and video-only modes.
+- Use the renamed camera blueprint filename in documentation and tests.
+
+## 0.6.1
+
+- Update the motion camera blueprint to send attachments with the integration's rich send action.
+- Add selectable JPEG snapshots or MP4 recordings, clip duration/lookback, output directory and optional blocking entities.
+- Validate both capture branches by executing their Home Assistant scripts with mocked services.
+
+## 0.6.0
+
+- Add an Assist troubleshooting screen with pipeline/agent information and safe clearing of conversation references.
+- Support up to 64 destination-specific pipeline assignments without changing authorization or silently falling back from unavailable agents.
+- Add opt-in quoted message context, limited to 2,000 characters and explicitly disclosed as input to the selected agent/provider.
+- Keep new-message permissions, activation and reset behavior unchanged when quoted context is enabled.
+
+## 0.5.4
+
+- Add an optional typing indicator while Assist processes and replies in direct or group chats.
+- Refresh indicators during longer requests and attempt to stop them on success, failure and unload.
+- Bound indicator operations and isolate failures from Assist responses.
+
+## 0.5.3
+
+- Add an opt-in Send read receipts setting for incoming messages accepted by event permissions or Assist.
+- Send receipts to the original sender for direct and group messages in polling and WebSocket modes.
+- Bound receipt work, suppress duplicates, cancel pending receipts on unload and expose content-free delivery counters in diagnostics.
+
+## 0.5.2
+
+- Explain busy, oversized and expired Assist requests with quoted, rate-limited replies.
+- Bound feedback work separately from pipeline work and cancel both on unload; never retry failed notices.
+- Add content-free diagnostic sensors for Assist status, queue length, completed runs, errors, rejected requests, suppressed feedback and last error.
+- Include rejection reason counters in downloaded diagnostics.
+
+## 0.5.1
+
+- Honor disabled local handling by using the selected agent without sentence-trigger interception.
+- Start fresh conversation context when a pipeline's agent, language or local-handling preference changes, preventing retained follow-ups from using the old agent.
+- Add content-free routing diagnostics for saved/running activation, pipeline selection consistency and the last completed response's local-processing status.
+- Cover repeated non-local replies, intentional local handling and mid-conversation agent switching with real Home Assistant pipeline tests.
+
+## 0.5.0
+
+- Add direct text conversations with a selected Assist pipeline, without user-created automations.
+- Configure separate Assist allowlists, direct-chat activation, a mandatory group prefix, idle timeout and optional event publishing.
+- Isolate conversation references per account/chat/sender and support a reset command.
+- Bound queued work, input/output sizes, session references and execution time; cancel work on unload and never automatically retry uncertain operations.
+- Reply to the originating chat and quote group commands.
+- Preserve Assist options when updating notification destinations and add content-free Assist diagnostics.
+- Validate text-only operation against Home Assistant's real Assist pipeline.
+
+## 0.4.0
+
+- Guide setup through existing-account selection or in-dialog QR linking, including empty backends and account-list refresh.
+- Reuse QR credentials during a linking attempt, hide expired codes, and require explicit regeneration.
+- Offer Note to self during destination setup before contacts synchronize.
+- Add an account overview and QR linking in options without switching the entry's bound account.
+- List linked devices with timestamps and provide confirmed addition/removal, subject to backend account-role permissions.
+- Keep provisioning credentials out of saved entries and avoid automatic mutation retries.
+
+## 0.3.2
+
+- Add an optional notification-destination checkbox when creating a group; confirmation saves the returned group ID and reloads notification entities.
+- Preserve existing destinations and incoming permissions.
+- Clarify that the supported backend's delete endpoint leaves the group rather than deleting it for everyone.
+
+## 0.3.1
+
+- Include explicit labels in both options menus so buttons remain visible when frontend translations are stale or unavailable.
+- After updating, restart Home Assistant and refresh the browser to reload page titles and field translations.
+
+## 0.3.0
+
+- Discover running production and edge Signal add-ons and connect through Supervisor-reported internal DNS on port 8080.
+- Retain manual backend configuration and selection when multiple add-ons are running.
+- Add an options menu for notification settings and group management.
+- Create groups, view group details, edit names/descriptions/timers/invite links/permissions, manage members and administrators, and leave groups.
+- Require confirmation for group changes and avoid automatic retries after uncertain failures.
+- Preserve existing notification destination IDs and incoming permissions.
+
+## 0.2.0
+
+- Send and remove reactions through dedicated actions.
+- Receive authorized reaction events with original-message references, emoji and removal status.
+- Send expiring alerts with reminders and acknowledgment matching; listeners are installed before sending and cleaned up on cancellation/unload.
+- Add a binary-sensor alert blueprint that stops on acknowledgment, sensor resolution or expiry.
+- Select incoming permissions from named contacts/groups; retain manual identifiers.
+- Optionally send one deliberate setup test without persisting or automatically retrying that choice.
+- Add filtered-event and pending-alert diagnostic counts.
+- Keep message event schema version 1 and existing configuration entries compatible.
+
+Live Signal/add-on acceptance and HACS installation remain pending; automated tests use synthetic fixtures and loopback servers.
+
 ## 0.1.0
 
 First local release candidate; live Signal acceptance testing is still required.

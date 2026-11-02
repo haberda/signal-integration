@@ -15,9 +15,9 @@ The pinned test harness installs Home Assistant 2026.9.1. Tests use mock backend
 
 Keep the REST client independent of Home Assistant, sanitize exceptions, and add receive fixtures without real identities or message bodies. Changes to the public event schema require an explicit compatibility decision. Keep `strings.json` and `translations/en.json` synchronized.
 
-Before a public release, run the manual acceptance checks in the README against a linked test account in both the add-on and a pinned standalone API image. Check WebSocket reconnect, polling ownership, HA restart, account unlinking and failed sends. Update the compatibility table with the actual image digest and results. Do not infer live acceptance from mock tests.
+Before a release, test direct/group sending, attachments, receiving permissions, Assist, account linking and group/device changes against a linked test account in both the add-on and a pinned standalone API image. Check WebSocket reconnect, polling ownership, HA restart, account unlinking and failed sends. Record the backend version and results; do not infer live acceptance from mock tests.
 
-The GitHub workflow runs tests, Ruff, Hassfest and HACS validation after this repository is mirrored to GitHub. Keep the existing upstream remote unless the owner chooses to change it. Update manifest documentation and issue URLs if their destination changes. A public GitHub mirror is required for HACS installation.
+The GitHub workflow runs tests, Ruff, Hassfest and HACS validation.
 
 For a release, update `manifest.json` and `CHANGELOG.md` together and create a matching GitHub release after validation. Tags and publishing are separate from local development commits.
 

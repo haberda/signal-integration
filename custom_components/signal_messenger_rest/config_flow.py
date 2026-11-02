@@ -21,6 +21,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from .addon import running_addons
 from .api import (
     CannotConnect,
     InvalidAuth,
@@ -29,16 +30,21 @@ from .api import (
     UnsupportedServer,
     normalize_url,
 )
+from .assist_flow import AssistFlowMixin
 from .const import (
     CONF_ACCOUNT,
     CONF_DESTINATIONS,
     CONF_GROUPS,
     CONF_INTERVAL,
+    CONF_READ_RECEIPTS,
     CONF_RECEIVE,
     CONF_SENDERS,
     DEFAULT_INTERVAL,
     DOMAIN,
 )
+from .device_flow import DeviceFlowMixin
+from .group_flow import GroupFlowMixin
+from .link_flow import LinkFlowMixin
 
 
 def connection_schema(defaults: dict) -> vol.Schema:
@@ -58,6 +64,29 @@ def connection_schema(defaults: dict) -> vol.Schema:
     )
 
 
+def permission_selector(choices: dict[str, str], *, groups: bool) -> SelectSelector:
+    return SelectSelector(
+        SelectSelectorConfig(
+            options=[
+                {"value": key, "label": label}
+                for key, label in choices.items()
+                if key.startswith("group.") == groups
+            ],
+            multiple=True,
+            custom_value=True,
+            mode=SelectSelectorMode.DROPDOWN,
+        )
+    )
+
+
+async def test_destination(client: SignalClient, account: str, recipient: str) -> None:
+    result = await client.send(
+        account, [recipient], "Home Assistant Signal integration test."
+    )
+    if result.get("errors"):
+        raise SignalError("Test send failed")
+
+
 def options_schema(choices: dict[str, str], defaults: dict) -> vol.Schema:
     selected = [d["recipient"] for d in defaults.get(CONF_DESTINATIONS, [])]
     return vol.Schema(
@@ -72,15 +101,29 @@ def options_schema(choices: dict[str, str], defaults: dict) -> vol.Schema:
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Optional("customize_names", default=False): BooleanSelector(),
             vol.Required(
                 CONF_RECEIVE, default=defaults.get(CONF_RECEIVE, False)
             ): BooleanSelector(),
+            vol.Optional(
+                CONF_READ_RECEIPTS, default=defaults.get(CONF_READ_RECEIPTS, False)
+            ): BooleanSelector(),
             vol.Required(
                 CONF_SENDERS, default=defaults.get(CONF_SENDERS, [])
-            ): TextSelector(TextSelectorConfig(multiple=True)),
+            ): permission_selector(choices, groups=False),
             vol.Required(
                 CONF_GROUPS, default=defaults.get(CONF_GROUPS, [])
-            ): TextSelector(TextSelectorConfig(multiple=True)),
+            ): permission_selector(choices, groups=True),
+            vol.Optional("test_recipient", default=""): SelectSelector(
+                SelectSelectorConfig(
+                    options=[{"value": "", "label": "Do not send a test message"}]
+                    + [
+                        {"value": key, "label": label} for key, label in choices.items()
+                    ],
+                    custom_value=True,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
             vol.Required(
                 CONF_INTERVAL, default=defaults.get(CONF_INTERVAL, DEFAULT_INTERVAL)
             ): NumberSelector(
@@ -108,7 +151,11 @@ def make_options(data: dict, choices: dict, previous: dict | None = None) -> dic
         )
     if not destinations:
         raise ValueError("Select at least one destination")
+    data = {
+        k: v for k, v in data.items() if k not in {"test_recipient", "customize_names"}
+    }
     return {
+        **(previous or {}),
         **data,
         CONF_DESTINATIONS: destinations,
         CONF_SENDERS: list(
@@ -141,7 +188,42 @@ def error_key(err: Exception) -> str:
     return "cannot_connect"
 
 
-class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
+class DestinationNamesMixin:
+    """Collect optional names before committing destination settings."""
+
+    async def _destination_names_or_finish(self, options, customize):
+        self._pending_options = options
+        self._destination_index = 0
+        if customize:
+            return await self.async_step_destination_name()
+        return self._finish_destination_options()
+
+    async def async_step_destination_name(self, user_input=None):
+        destinations = self._pending_options[CONF_DESTINATIONS]
+        destination = destinations[self._destination_index]
+        if user_input is not None:
+            name = user_input.get("name", "").strip()
+            destinations[self._destination_index] = {
+                **destination,
+                "name": name
+                or self._choices.get(
+                    destination["recipient"], destination["recipient"]
+                ),
+            }
+            self._destination_index += 1
+            if self._destination_index == len(destinations):
+                return self._finish_destination_options()
+            destination = destinations[self._destination_index]
+        return self.async_show_form(
+            step_id="destination_name",
+            data_schema=vol.Schema(
+                {vol.Optional("name", default=destination["name"]): TextSelector()}
+            ),
+            description_placeholders={"recipient": destination["recipient"]},
+        )
+
+
+class SignalConfigFlow(DestinationNamesMixin, LinkFlowMixin, ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self):
@@ -149,6 +231,7 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
         self._accounts: list[str] = []
         self._choices: dict[str, str] = {}
         self._client: SignalClient | None = None
+        self._addons: dict[str, str] = {}
 
     @staticmethod
     @callback
@@ -157,6 +240,10 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         errors = {}
+        if user_input is None:
+            self._addons = running_addons(self.hass)
+        if user_input is None and self._addons:
+            return await self.async_step_addon()
         if user_input is not None:
             try:
                 self._data = {
@@ -165,8 +252,6 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
                 self._client = client_for(self.hass, self._data)
                 _, self._accounts = await self._client.discover()
-                if not self._accounts:
-                    return self.async_abort(reason="no_accounts")
                 return await self.async_step_account()
             except (SignalError, ValueError) as err:
                 errors["base"] = error_key(err)
@@ -176,9 +261,52 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_addon(self, user_input=None):
+        if user_input is not None:
+            url = user_input["addon"]
+            if url == "manual":
+                return self.async_show_form(
+                    step_id="user", data_schema=connection_schema({})
+                )
+            return await self.async_step_user({CONF_URL: url, CONF_VERIFY_SSL: True})
+        return self.async_show_form(
+            step_id="addon",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "addon", default=next(iter(self._addons))
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                {"value": url, "label": label}
+                                for url, label in self._addons.items()
+                            ]
+                            + [{"value": "manual", "label": "Enter a URL manually"}]
+                        )
+                    )
+                }
+            ),
+        )
+
+    @property
+    def link_client(self):
+        return self._client
+
+    async def async_link_finished(self, accounts):
+        self._accounts = accounts
+        return await self.async_step_account()
+
     async def async_step_account(self, user_input=None):
         if user_input is not None:
             account = user_input[CONF_ACCOUNT]
+            if account == "link_phone":
+                return await self.async_step_link_start()
+            if account == "refresh_accounts":
+                try:
+                    self._accounts = await self._client.accounts()
+                except SignalError:
+                    return self.async_abort(reason="account_read_failed")
+                return await self.async_step_account()
             if account not in self._accounts:
                 return self.async_abort(reason="account_missing")
             self._data[CONF_ACCOUNT] = account
@@ -188,13 +316,29 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._choices = await self._client.destinations(account)
             except InvalidAuth:
                 return self.async_abort(reason="invalid_auth")
+            self._choices.setdefault(account, "Note to self")
             return await self.async_step_settings()
         return self.async_show_form(
             step_id="account",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_ACCOUNT): SelectSelector(
-                        SelectSelectorConfig(options=self._accounts)
+                        SelectSelectorConfig(
+                            options=[
+                                {"value": account, "label": account}
+                                for account in self._accounts
+                            ]
+                            + [
+                                {
+                                    "value": "link_phone",
+                                    "label": "Link a phone account using a QR code",
+                                },
+                                {
+                                    "value": "refresh_accounts",
+                                    "label": "Refresh account list",
+                                },
+                            ]
+                        )
                     ),
                 }
             ),
@@ -202,21 +346,33 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_settings(self, user_input=None):
         errors = {}
+        options = {}
         if user_input is not None:
             try:
                 options = make_options(user_input, self._choices)
+                if recipient := user_input.get("test_recipient", "").strip():
+                    await test_destination(
+                        self._client, self._data[CONF_ACCOUNT], recipient
+                    )
+            except SignalError:
+                errors["base"] = "test_failed"
             except ValueError:
                 errors["base"] = "no_destinations"
             else:
-                return self.async_create_entry(
-                    title=f"Signal {self._data[CONF_ACCOUNT]}",
-                    data=self._data,
-                    options=options,
+                return await self._destination_names_or_finish(
+                    options, user_input.get("customize_names", False)
                 )
         return self.async_show_form(
             step_id="settings",
-            data_schema=options_schema(self._choices, {}),
+            data_schema=options_schema(self._choices, options),
             errors=errors,
+        )
+
+    def _finish_destination_options(self):
+        return self.async_create_entry(
+            title=f"Signal {self._data[CONF_ACCOUNT]}",
+            data=self._data,
+            options=self._pending_options,
         )
 
     async def async_step_reconfigure(self, user_input=None):
@@ -263,14 +419,51 @@ class SignalConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
-class SignalOptionsFlow(OptionsFlow):
+class SignalOptionsFlow(
+    DestinationNamesMixin,
+    AssistFlowMixin,
+    LinkFlowMixin,
+    DeviceFlowMixin,
+    GroupFlowMixin,
+    OptionsFlow,
+):
     def __init__(self):
         self._choices = {}
 
+    @property
+    def group_client(self):
+        entry = self.config_entry
+        runtime = getattr(entry, "runtime_data", None)
+        return runtime.client if runtime else client_for(self.hass, entry.data)
+
+    @property
+    def link_client(self):
+        return self.group_client
+
+    async def async_link_finished(self, accounts):
+        # Linking does not change the account bound to an existing config entry.
+        return await self.async_step_accounts()
+
     async def async_step_init(self, user_input=None):
+        return self.async_show_menu(
+            step_id="init",
+            # Explicit labels also render when the frontend has cached older
+            # translations that predate the options menu.
+            menu_options={
+                "settings": "Destinations and receiving",
+                "groups": "Manage Signal groups",
+                "accounts": "Accounts and linked devices",
+                "assist": "Assist conversations",
+                "assist_status": "Assist troubleshooting",
+                "assist_routes": "Assist pipelines by destination",
+            },
+        )
+
+    async def async_step_settings(self, user_input=None):
         errors = {}
+        options = dict(self.config_entry.options)
         choices = {
-            d["recipient"]: d["name"]
+            d["recipient"]: d["recipient"]
             for d in self.config_entry.options.get(CONF_DESTINATIONS, [])
         }
         if user_input is None:
@@ -282,18 +475,35 @@ class SignalOptionsFlow(OptionsFlow):
                 )
             except CannotConnect, SignalError:
                 pass
-        self._choices.update(choices)
+            self._choices.update(choices)
         if user_input is not None:
             try:
                 options = make_options(
                     user_input, self._choices, dict(self.config_entry.options)
                 )
+                if recipient := user_input.get("test_recipient", "").strip():
+                    entry = self.config_entry
+                    runtime = getattr(entry, "runtime_data", None)
+                    client = (
+                        runtime.client if runtime else client_for(self.hass, entry.data)
+                    )
+                    await test_destination(client, entry.data[CONF_ACCOUNT], recipient)
+            except SignalError:
+                errors["base"] = "test_failed"
             except ValueError:
                 errors["base"] = "no_destinations"
             else:
-                return self.async_create_entry(data=options)
+                return await self._destination_names_or_finish(
+                    options, user_input.get("customize_names", False)
+                )
         return self.async_show_form(
-            step_id="init",
-            data_schema=options_schema(choices, dict(self.config_entry.options)),
+            step_id="settings",
+            data_schema=options_schema(
+                self._choices,
+                options,
+            ),
             errors=errors,
         )
+
+    def _finish_destination_options(self):
+        return self.async_create_entry(data=self._pending_options)

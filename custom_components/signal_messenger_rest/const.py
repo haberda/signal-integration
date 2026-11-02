@@ -14,3 +14,7 @@ MAX_TOTAL_BYTES = 20 * 1024 * 1024
 MAX_ATTACHMENTS = 5
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MODES = {"normal", "native", "json-rpc", "json-rpc-native"}
+
+EVENT_REACTION = f"{DOMAIN}_reaction_received"
+
+CONF_READ_RECEIPTS = "send_read_receipts"

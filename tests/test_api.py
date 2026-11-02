@@ -192,3 +192,85 @@ async def test_websocket_auth(aiohttp_server):
         with pytest.raises(InvalidAuth):
             async for _ in client.messages("account"):
                 pass
+
+
+async def test_group_http_contract(aiohttp_server):
+    seen = []
+
+    async def handler(request):
+        seen.append(
+            (
+                request.method,
+                request.path,
+                await request.json() if request.can_read_body else None,
+            )
+        )
+        if request.method == "GET":
+            return web.json_response([{"id": "group.test", "name": "Home"}])
+        if request.path.endswith("+123"):
+            return web.json_response({"id": "group.new"}, status=201)
+        return web.Response(status=204)
+
+    app = web.Application()
+    app.router.add_route("*", "/proxy/v1/groups/{tail:.*}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/proxy")))
+        assert (await client.groups("+123"))[0]["name"] == "Home"
+        await client.change_group(
+            "+123", "create", None, {"name": "New", "members": ["+456"]}
+        )
+        await client.change_group(
+            "+123", "remove_members", "group.test", {"members": ["+456"]}
+        )
+    assert seen == [
+        ("GET", "/proxy/v1/groups/+123", None),
+        ("POST", "/proxy/v1/groups/+123", {"name": "New", "members": ["+456"]}),
+        ("DELETE", "/proxy/v1/groups/+123/group.test/members", {"members": ["+456"]}),
+    ]
+
+
+@pytest.mark.parametrize("status", [204, 400, 401])
+async def test_read_receipt_contract(aiohttp_server, status):
+    seen = []
+
+    async def handler(request):
+        seen.append(await request.json())
+        assert request.path == "/proxy/v1/receipts/+12025550100"
+        return web.Response(status=status)
+
+    app = web.Application()
+    app.router.add_post("/proxy/v1/receipts/{account}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/proxy/")))
+        if status == 204:
+            await client.send_read_receipt("+12025550100", "sender-uuid", 123)
+        else:
+            with pytest.raises(InvalidAuth if status == 401 else SignalError):
+                await client.send_read_receipt("+12025550100", "sender-uuid", 123)
+    assert seen == [
+        {"recipient": "sender-uuid", "receipt_type": "read", "timestamp": 123}
+    ]
+
+
+@pytest.mark.parametrize("recipient", ["+12025550101", "group.WVdKag=="])
+async def test_typing_contract(aiohttp_server, recipient):
+    seen = []
+
+    async def handler(request):
+        seen.append((request.method, await request.json()))
+        assert request.path == "/proxy/v1/typing-indicator/+12025550100"
+        return web.Response(status=204)
+
+    app = web.Application()
+    app.router.add_route("*", "/proxy/v1/typing-indicator/{account}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/proxy/")))
+        await client.set_typing("+12025550100", recipient, True)
+        await client.set_typing("+12025550100", recipient, False)
+    assert seen == [
+        ("PUT", {"recipient": recipient}),
+        ("DELETE", {"recipient": recipient}),
+    ]
