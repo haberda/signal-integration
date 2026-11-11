@@ -6,7 +6,10 @@
 - Preserve phone-number quote authors in command replies.
 - Clarify Assist/event permissions, alert unavailable-state behavior and camera blueprint migration.
 - Exercise blueprint triggers, failure paths, blocking changes and acknowledgment cancellation with Home Assistant automation tests.
-
+- Keep receiving when a single incoming event cannot be handled; count such events in diagnostics as `dispatch_errors` and log only the error type.
+- Limit one send action to five minutes overall, covering the wait for earlier sends, attachment preparation and all destinations. Destinations not reached are reported as not attempted and an interrupted send as uncertain; nothing is retried.
+- Document that restarts, reloads and option changes cancel pending acknowledgment alerts and the waiting automation run.
+- Test against the latest Home Assistant release in CI, and fail clearly if the pipeline routing attribute used by the Assist bridge disappears.
 - Add a snapshot-then-video mode to the motion blueprint, retaining snapshot-only and video-only modes.
 - Use the renamed camera blueprint filename in documentation and tests.
 

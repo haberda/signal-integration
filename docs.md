@@ -45,6 +45,7 @@ Merge this into your existing `homeassistant:` configuration and restart. URL at
 - Select `config_entry_id` in the action editor if you have multiple Signal accounts.
 - Recipients can be phone numbers with country codes, UUIDs, usernames or REST `group.` IDs. Omitting `recipients` sends to all configured destinations.
 - Attachments are limited to **five files, 10 MiB per file, 20 MiB combined**.
+- One action has **five minutes** in total, including waiting for earlier sends on the same account, preparing attachments and all destinations. Destinations not reached in time are reported as not attempted; a send interrupted by the limit may already have been delivered, so do not blindly retry it.
 - Optional `title` is prepended to the message. Set `text_mode: styled` for supported text formatting.
 - For a quoted reply, supply both `quote_timestamp` (original milliseconds) and `quote_author` (sender UUID or number). `quote_message` is optional.
 
@@ -133,7 +134,7 @@ data:
 response_variable: alert_result
 ```
 
-Receiving must be enabled. Use a phone number, UUID or REST group ID, not a username. If reactions hide the sending account's number, set `account_author` to that account's UUID. The response includes `acknowledged`, `reason` and the original `timestamp`. The sensor turning off cancels its wait. Unknown/unavailable states leave it running; returning to on starts a fresh alert. Reload/restart cancels pending alerts.
+Receiving must be enabled. Use a phone number, UUID or REST group ID, not a username. If reactions hide the sending account's number, set `account_author` to that account's UUID. The response includes `acknowledged`, `reason` and the original `timestamp`. The sensor turning off cancels its wait. Unknown/unavailable states leave it running; returning to on starts a fresh alert. Pending alerts are not stored: a restart, a reload or saving the integration's options cancels them, along with the automation or script run that is waiting on the action. Avoid changing options while an alert is waiting, and send it again afterwards if still needed.
 
 ### Read receipts
 
