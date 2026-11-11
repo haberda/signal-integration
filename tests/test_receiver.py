@@ -54,3 +54,26 @@ async def test_reconnect_backoff_then_auth_stops():
     assert [c.args[0] for c in sleep.call_args_list] == [1, 2]
     assert receiver.reconnects == 2
     auth.assert_called_once()
+
+
+async def test_handler_failure_is_counted_without_ending_reception(caplog):
+    second = {**RAW, "envelope": {**RAW["envelope"], "timestamp": 1700000009999}}
+    second["envelope"]["dataMessage"] = {
+        **RAW["envelope"]["dataMessage"],
+        "timestamp": 1700000009999,
+    }
+    client = Mock(mode="native")
+    client.receive = AsyncMock(side_effect=[[RAW, RAW, second], InvalidAuth()])
+    message = Mock(side_effect=[RuntimeError("private body"), None])
+    receiver = Receiver(client, "+12025550100", 10, message, Mock(), Mock())
+    with patch(
+        "custom_components.signal_messenger_rest.receiver.asyncio.sleep",
+        new_callable=AsyncMock,
+    ):
+        await receiver.run()
+    # The failed event is not redelivered, and the next one is still handled.
+    assert message.call_count == 2
+    assert client.receive.await_count == 2
+    assert receiver.dispatch_errors == 1
+    assert "RuntimeError" in caplog.text
+    assert "private body" not in caplog.text

@@ -38,4 +38,5 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "allowed_group_count": len(entry.options.get("allowed_groups", [])),
         "reconnects": runtime.receiver.reconnects if runtime.receiver else 0,
         "ignored_envelopes": runtime.receiver.ignored if runtime.receiver else 0,
+        "dispatch_errors": runtime.receiver.dispatch_errors if runtime.receiver else 0,
     }

@@ -1,12 +1,15 @@
 """Cancellable receiver with bounded deduplication and reconnect backoff."""
 
 import asyncio
+import logging
 from collections import OrderedDict
 from collections.abc import Callable
 from random import uniform
 
 from .api import InvalidAuth, SignalClient, SignalError
 from .models import IncomingEvent, normalize_event
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Receiver:
@@ -28,18 +31,31 @@ class Receiver:
         self.seen: OrderedDict[tuple, None] = OrderedDict()
         self.reconnects = 0
         self.ignored = 0
+        self.dispatch_errors = 0
 
     def dispatch(self, raw) -> None:
-        message = normalize_event(raw, self.account)
-        if message is None:
-            self.ignored += 1
-            return
-        if message.dedup_key in self.seen:
-            return
-        self.seen[message.dedup_key] = None
-        if len(self.seen) > 2048:
-            self.seen.popitem(last=False)
-        self.on_message(message)
+        """Handle one envelope; a defective one must not end reception."""
+        try:
+            message = normalize_event(raw, self.account)
+            if message is None:
+                self.ignored += 1
+                return
+            if message.dedup_key in self.seen:
+                return
+            # Recorded before handling, so a failed event is never redelivered.
+            self.seen[message.dedup_key] = None
+            if len(self.seen) > 2048:
+                self.seen.popitem(last=False)
+            self.on_message(message)
+        except Exception as err:
+            # Exception text may contain message content; report only its type.
+            if not self.dispatch_errors:
+                _LOGGER.warning(
+                    "Skipped a Signal event that could not be handled (%s); "
+                    "further occurrences are only counted in diagnostics",
+                    type(err).__name__,
+                )
+            self.dispatch_errors += 1
 
     async def run(self) -> None:
         delay = 1
