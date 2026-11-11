@@ -13,6 +13,13 @@ async def test_pipeline_unavailable(hass):
         await run_text(hass, "missing", "Hello")
 
 
+def test_agent_only_routing_flag_exists():
+    """The bridge sets this private attribute; a rename would silently drop it."""
+    from homeassistant.components.assist_pipeline.pipeline import PipelineRun
+
+    assert PipelineRun._intent_agent_only is False
+
+
 async def test_real_intent_pipeline(hass):
     from homeassistant.components.assist_pipeline.pipeline import async_get_pipelines
 

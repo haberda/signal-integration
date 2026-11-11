@@ -17,7 +17,7 @@ Keep the REST client independent of Home Assistant, sanitize exceptions, and add
 
 Before a release, test direct/group sending, attachments, receiving permissions, Assist, account linking and group/device changes against a linked test account in both the add-on and a pinned standalone API image. Check WebSocket reconnect, polling ownership, HA restart, account unlinking and failed sends. Record the backend version and results; do not infer live acceptance from mock tests.
 
-The GitHub workflow runs tests, Ruff, Hassfest and HACS validation.
+The GitHub workflow runs tests, Ruff, Hassfest and HACS validation. A second test job, also run weekly, installs the latest Home Assistant test harness with that release's own Assist dependency pins. A failure there and not in the pinned job points to a Home Assistant change, particularly in the pipeline internals used by the Assist bridge.
 
 For a release, update `manifest.json` and `CHANGELOG.md` together and create a matching GitHub release after validation. Tags and publishing are separate from local development commits.
 
