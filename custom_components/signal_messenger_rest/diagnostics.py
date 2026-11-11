@@ -13,6 +13,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "read_receipts_sent": runtime.receipts.sent,
         "read_receipts_failed": runtime.receipts.failed,
         "read_receipts_dropped": runtime.receipts.dropped,
+        "last_send": runtime.last_send_outcome,
         "pending_alerts": len(runtime.alert_tasks),
         "assist_enabled": runtime.assist.settings.get("enabled", False),
         "assist_running_activation": runtime.assist.settings.get(

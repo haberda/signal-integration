@@ -7,6 +7,7 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ServiceValidationError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -25,6 +26,7 @@ from .const import (
     SEND_DEADLINE,
 )
 from .models import IncomingEvent, Reaction
+from .outcomes import failed_members, overall_status, reason_counts
 from .receipts import ReadReceipts
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,6 +51,8 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
         self.connected = False
         self.last_received = None
         self.last_sent = None
+        self.last_send_outcome = None
+        self.identity_failures: dict[str, list[str]] = {}
         self.receiver = None
         self.receiver_task = None
         self.send_lock = asyncio.Lock()
@@ -180,61 +184,131 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
             results = []
             for recipient in recipients:
                 if loop.time() >= deadline:
-                    results.append(
-                        {
-                            "recipient": recipient,
-                            "success": False,
-                            "error": "Not attempted; the send time limit was reached",
-                        }
-                    )
-                    continue
-                try:
-                    async with asyncio.timeout_at(deadline):
-                        result = await self.client.send(
-                            self.account, [recipient], message, **fields
-                        )
-                    if result.get("errors"):
-                        results.append(
-                            {
-                                "recipient": recipient,
-                                "success": False,
-                                "error": "Backend reported a recipient failure",
-                            }
-                        )
-                    else:
-                        results.append(
-                            {
-                                "recipient": recipient,
-                                "success": True,
-                                "timestamp": str(result["timestamp"]),
-                            }
-                        )
-                        self.last_sent = dt_util.utcnow()
-                except InvalidAuth:
-                    self.auth_failed()
-                    results.append(
-                        {
-                            "recipient": recipient,
-                            "success": False,
-                            "error": "API authentication failed",
-                        }
-                    )
-                except SignalError as err:
-                    results.append(
-                        {"recipient": recipient, "success": False, "error": str(err)}
-                    )
-                except TimeoutError:
-                    results.append(
-                        {
-                            "recipient": recipient,
-                            "success": False,
-                            "error": "Send time limit reached; this send may already have succeeded",
-                        }
-                    )
+                    result = {"error": "Not attempted; the send time limit was reached"}
+                else:
+                    result = await self._send_one(recipient, message, fields, deadline)
+                result["success"] = "error" not in result
+                result["status"] = (
+                    "failed"
+                    if "error" in result
+                    else "partial"
+                    if result.get("failed_members")
+                    else "sent"
+                )
+                results.append({"recipient": recipient, **result})
+                if result["success"]:
+                    self.last_sent = dt_util.utcnow()
+                self._track_identity_failures(recipient, result)
+            self._record_outcome(results)
             self.async_update_listeners()
         finally:
             self.send_lock.release()
-        return {"success": all(r["success"] for r in results), "results": results}
+        return {
+            "success": all(r["success"] for r in results),
+            "partial": any(r["status"] == "partial" for r in results),
+            "results": results,
+        }
+
+    async def _send_one(
+        self, recipient: str, message: str, fields: dict, deadline: float
+    ) -> dict:
+        """Send to one destination; an ``error`` key marks it as failed."""
+        try:
+            async with asyncio.timeout_at(deadline):
+                result = await self.client.send(
+                    self.account, [recipient], message, **fields
+                )
+        except InvalidAuth:
+            self.auth_failed()
+            return {"error": "API authentication failed"}
+        except SignalError as err:
+            return {"error": str(err)}
+        except TimeoutError:
+            return {
+                "error": "Send time limit reached; this send may already have succeeded"
+            }
+        sent = {"timestamp": str(result["timestamp"])}
+        members = failed_members(result)
+        if members is None:
+            return {**sent, "error": "Backend reported a recipient failure"}
+        if not members:
+            return sent
+        sent["failed_members"] = members
+        if recipient.startswith("group."):
+            # The backend lists only members that failed; the message was sent.
+            return sent
+        reasons = ", ".join(sorted({member["reason"] for member in members}))
+        return {
+            **sent,
+            "error": f"Signal could not deliver to this recipient ({reasons})",
+        }
+
+    def _record_outcome(self, results: list[dict]) -> None:
+        """Keep a content-free summary for diagnostics and warn about failures."""
+        counts = reason_counts(results)
+        self.last_send_outcome = {
+            "status": overall_status(results),
+            "destinations": len(results),
+            "failed_destinations": sum(not r["success"] for r in results),
+            "failed_members": counts,
+        }
+        if counts:
+            _LOGGER.warning(
+                "Signal reported recipient failures for a send (%s); "
+                "messages to groups were still sent to the other members",
+                ", ".join(
+                    f"{reason}: {count}" for reason, count in sorted(counts.items())
+                ),
+            )
+
+    def _track_identity_failures(self, recipient: str, result: dict) -> None:
+        """Raise a repair for changed safety numbers; never trust automatically."""
+        untrusted = [
+            member["member"]
+            for member in result.get("failed_members", [])
+            if member["reason"] == "identity_failure"
+        ]
+        if untrusted:
+            if self.identity_failures.get(recipient) == untrusted:
+                return
+            if (
+                recipient not in self.identity_failures
+                and len(self.identity_failures) >= 20
+            ):
+                return
+            self.identity_failures[recipient] = untrusted
+        elif result["status"] == "sent" and recipient in self.identity_failures:
+            del self.identity_failures[recipient]
+        else:
+            return
+        members = sorted(
+            {m for found in self.identity_failures.values() for m in found}
+        )
+        if not members:
+            self.clear_identity_issue()
+            return
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self.identity_issue_id,
+            is_fixable=False,
+            is_persistent=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="untrusted_identity",
+            translation_placeholders={
+                "account": self.entry.title,
+                "members": ", ".join(members[:10]),
+            },
+        )
+
+    @property
+    def identity_issue_id(self) -> str:
+        return f"untrusted_identity_{self.entry.entry_id}"
+
+    @callback
+    def clear_identity_issue(self) -> None:
+        self.identity_failures.clear()
+        ir.async_delete_issue(self.hass, DOMAIN, self.identity_issue_id)
 
     async def react(
         self,

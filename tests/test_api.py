@@ -274,3 +274,30 @@ async def test_typing_contract(aiohttp_server, recipient):
         ("PUT", {"recipient": recipient}),
         ("DELETE", {"recipient": recipient}),
     ]
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "error"),
+    [
+        (
+            201,
+            {"errors": {"recipients": [{"reason": "IDENTITY_FAILURE"}]}},
+            "uncertain",
+        ),
+        (500, {"error": "private backend detail"}, "HTTP 500"),
+    ],
+)
+async def test_send_without_reference_or_with_server_error(
+    aiohttp_server, status, body, error
+):
+    async def handler(request):
+        return web.json_response(body, status=status)
+
+    app = web.Application()
+    app.router.add_post("/v2/send", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        with pytest.raises(SignalError, match=error) as exc:
+            await client.send("+12025550100", ["group.test"], "hello")
+        assert "private" not in str(exc.value)

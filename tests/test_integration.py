@@ -81,11 +81,18 @@ async def test_partial_failure_and_ambiguous_accounts(hass, entry, api_mock):
         )
         assert response == {
             "success": False,
+            "partial": False,
             "results": [
-                {"recipient": "+12025550101", "success": True, "timestamp": "1000"},
+                {
+                    "recipient": "+12025550101",
+                    "success": True,
+                    "status": "sent",
+                    "timestamp": "1000",
+                },
                 {
                     "recipient": "group.test",
                     "success": False,
+                    "status": "failed",
                     "error": "Delivery uncertain",
                 },
             ],
@@ -336,3 +343,167 @@ async def test_send_time_limit(hass, entry, api_mock):
         assert send.call_count == 1
         assert not runtime.send_lock.locked()
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+MEMBER_UUID = "0f6f2a0c-5d0e-4c57-9a5e-3f2b7c1d9e10"
+# Shape returned by signal-cli-rest-api 0.101+ when signal-cli reports a
+# non-success result for a recipient: HTTP 201, timestamp and errors.recipients.
+MEMBER_FAILED = {
+    "timestamp": "1000",
+    "errors": {
+        "recipients": [
+            {
+                "number": "+12025550102",
+                "uuid": MEMBER_UUID,
+                "reason": "IDENTITY_FAILURE",
+            },
+            {"uuid": MEMBER_UUID, "reason": "A_FUTURE_TYPE private detail"},
+        ]
+    },
+}
+
+
+async def test_group_member_failure_is_a_partial_send(hass, entry, api_mock, caplog):
+    from homeassistant.helpers import issue_registry as ir
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = entry.runtime_data
+    issues = ir.async_get(hass)
+    with patch(
+        "custom_components.signal_messenger_rest.api.SignalClient.send",
+        new_callable=AsyncMock,
+    ) as send:
+        # Direct and group sends without failures.
+        send.return_value = {"timestamp": "999"}
+        clean = await runtime.send_message(["+12025550101", "group.test"], "test")
+        assert clean["success"] and not clean["partial"]
+        assert [r["status"] for r in clean["results"]] == ["sent", "sent"]
+        assert runtime.last_send_outcome["status"] == "sent"
+
+        runtime.last_sent = None
+        send.return_value = MEMBER_FAILED
+        # Without response data, a partial group send must not raise.
+        await hass.services.async_call(
+            DOMAIN,
+            "send_message",
+            {"recipients": ["group.test"], "message": "test"},
+            blocking=True,
+        )
+        response = await hass.services.async_call(
+            DOMAIN,
+            "send_message",
+            {"recipients": ["group.test"], "message": "test"},
+            blocking=True,
+            return_response=True,
+        )
+        assert response == {
+            "success": True,
+            "partial": True,
+            "results": [
+                {
+                    "recipient": "group.test",
+                    "success": True,
+                    "status": "partial",
+                    "timestamp": "1000",
+                    "failed_members": [
+                        {"member": "…02", "reason": "identity_failure"},
+                        {"member": "0f6f2a0c…", "reason": "unknown_failure"},
+                    ],
+                }
+            ],
+        }
+        assert runtime.last_sent is not None
+        await hass.services.async_call(
+            "notify",
+            "send_message",
+            {"entity_id": "notify.signal_test_household", "message": "test"},
+            blocking=True,
+        )
+
+        diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+        assert diagnostics["last_send"] == {
+            "status": "partial",
+            "destinations": 1,
+            "failed_destinations": 0,
+            "failed_members": {"identity_failure": 1, "unknown_failure": 1},
+        }
+        issue = issues.async_get_issue(DOMAIN, runtime.identity_issue_id)
+        assert issue.translation_placeholders["members"] == "…02"
+        for private in ("+12025550102", MEMBER_UUID, "group.test", "private detail"):
+            assert private not in caplog.text
+            assert private not in str(diagnostics)
+            assert private not in str(issue.translation_placeholders)
+        assert "identity_failure: 1" in caplog.text
+
+        # The same report for a direct recipient means it was not delivered.
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(
+                DOMAIN,
+                "send_message",
+                {"recipients": ["+12025550102"], "message": "test"},
+                blocking=True,
+            )
+        direct = await runtime.send_message(["+12025550102"], "test")
+        assert not direct["success"] and not direct["partial"]
+        assert direct["results"][0]["status"] == "failed"
+        assert "identity_failure" in direct["results"][0]["error"]
+
+        # An unrecognized failure report stays a failure.
+        send.return_value = {"timestamp": "1000", "errors": {"unexpected": True}}
+        unknown = await runtime.send_message(["group.test"], "test")
+        assert unknown["results"][0]["status"] == "failed"
+        assert issues.async_get_issue(DOMAIN, runtime.identity_issue_id)
+
+        # Fully delivered sends to both affected destinations clear the repair.
+        send.return_value = {"timestamp": "1001"}
+        await runtime.send_message(["group.test"], "test")
+        assert issues.async_get_issue(DOMAIN, runtime.identity_issue_id)
+        await runtime.send_message(["+12025550102"], "test")
+        assert issues.async_get_issue(DOMAIN, runtime.identity_issue_id) is None
+
+        send.return_value = MEMBER_FAILED
+        await runtime.send_message(["group.test"], "test")
+        assert issues.async_get_issue(DOMAIN, runtime.identity_issue_id)
+    await hass.config_entries.async_unload(entry.entry_id)
+    assert issues.async_get_issue(DOMAIN, runtime.identity_issue_id) is None
+
+
+async def test_group_alert_uses_partial_send_reference(hass, entry, api_mock):
+    from custom_components.signal_messenger_rest.alerts import send_alert
+
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "receive": True}
+    )
+
+    async def messages(_self, _account):
+        yield {"_connected": True}
+        await asyncio.Event().wait()
+
+    with (
+        patch(
+            "custom_components.signal_messenger_rest.api.SignalClient.messages",
+            messages,
+        ),
+        patch(
+            "custom_components.signal_messenger_rest.api.SignalClient.send",
+            new_callable=AsyncMock,
+            return_value=MEMBER_FAILED,
+        ) as send,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        result = await send_alert(
+            entry.runtime_data,
+            recipient="group.test",
+            message="Alert",
+            expiry=1,
+            reminder_interval=0.2,
+        )
+        assert result == {
+            "acknowledged": False,
+            "reason": "expired",
+            "timestamp": "1000",
+        }
+        # Reminders followed and quoted the original, partially delivered alert.
+        assert send.await_count > 1
+        assert send.await_args.kwargs["quote_timestamp"] == 1000
+        await hass.config_entries.async_unload(entry.entry_id)

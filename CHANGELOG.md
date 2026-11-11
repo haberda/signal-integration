@@ -9,6 +9,9 @@
 - Keep receiving when a single incoming event cannot be handled; count such events in diagnostics as `dispatch_errors` and log only the error type.
 - Limit one send action to five minutes overall, covering the wait for earlier sends, attachment preparation and all destinations. Destinations not reached are reported as not attempted and an interrupted send as uncertain; nothing is retried.
 - Document that restarts, reloads and option changes cancel pending acknowledgment alerts and the waiting automation run.
+- Fix group sends being reported as failed when the message was sent but signal-cli-rest-api 0.101+ reported a failure for individual members. Such sends are now `partial`: they count as successful, update the last successful send, and no longer stop notify entities, Assist replies, or group alerts and their reminders.
+- Add `status` to each send result, `failed_members` with failure types and shortened identifiers for partial sends, and a top-level `partial` flag. Existing response keys are unchanged.
+- Log one content-free warning per send with member-failure counts, include the last send outcome in diagnostics, and raise a repair notice when a contact's safety number changed. Identities are never trusted automatically.
 - Fix Assist on Home Assistant 2026.10: with local handling disabled, sentence triggers could answer instead of the selected agent because the pipeline's internal routing flag moved. The bridge now sets it in either location and declines the request if it cannot.
 - Test against the latest Home Assistant release in CI as well as the pinned minimum.
 - Add a snapshot-then-video mode to the motion blueprint, retaining snapshot-only and video-only modes.

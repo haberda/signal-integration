@@ -49,7 +49,15 @@ Merge this into your existing `homeassistant:` configuration and restart. URL at
 - Optional `title` is prepended to the message. Set `text_mode: styled` for supported text formatting.
 - For a quoted reply, supply both `quote_timestamp` (original milliseconds) and `quote_author` (sender UUID or number). `quote_message` is optional.
 
-The response contains `success` and per-recipient `results`, including timestamps or sanitized errors. Without `response_variable`, failed destinations raise an action error. Sends are never retried automatically: a timeout can occur after delivery.
+The response contains `success`, `partial` and per-recipient `results`. Each result has a `status`:
+
+- `sent`: delivered to the backend without reported failures; includes the `timestamp`.
+- `partial`: a group message was sent, but Signal reported a failure for some members. It includes the `timestamp` and `failed_members`, each with a failure type such as `identity_failure` or `unregistered_failure` and a shortened identifier (last two digits of a number, or first eight characters of a UUID). A partial send counts as successful: it does not raise an action error, and alerts and Assist replies continue.
+- `failed`: not sent, not deliverable to a direct recipient, or uncertain; includes a sanitized `error`.
+
+Without `response_variable`, failed destinations raise an action error. Sends are never retried automatically: a timeout can occur after delivery, and retrying a partial group send would repeat the message for members who received it.
+
+Member failures are logged as one warning with counts per failure type. If a contact's safety number changed (`identity_failure`), a repair notice appears under **Settings → System → Repairs**. Verify the new safety number with that contact and trust it in the Signal backend; the integration never trusts identities automatically. Member-level results require signal-cli-rest-api 0.101 or later.
 
 ## Assist
 
@@ -192,6 +200,7 @@ Remove the old notifier YAML after migration. Stop competing receivers before en
 | Attachment fails | File exists inside HA, path/URL is allowlisted, size is within limits |
 | Camera recording fails | Camera stream support, output directory, stream integration and clip size |
 | Reaction does not acknowledge an alert | React to the original message; verify emoji, permissions and author UUID |
+| Group send reports failed members | Open the repair notice or the action response; verify and trust a changed safety number in the backend, or remove unregistered members |
 | HTTP 400 on send | The backend rejected the request; inspect backend details before changing contacts or retrying |
 | Read receipts missing | Enable the option; check receipt counters in downloaded diagnostics |
 

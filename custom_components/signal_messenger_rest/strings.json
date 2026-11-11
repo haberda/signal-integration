@@ -538,5 +538,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "untrusted_identity": {
+      "title": "A Signal contact's safety number changed",
+      "description": "Signal account {account} could not deliver to these recipients because their safety number changed and the new identity is not trusted yet: {members}. Phone numbers show only their last two digits and UUIDs only their first eight characters.\n\nMessages to a group were still sent to its other members. Verify the new safety number with the contact, then trust it in the Signal backend, for example with signal-cli-rest-api's `PUT /v1/identities/ACCOUNT/trust/CONTACT` request and a `verified_safety_number` body. The integration never trusts identities automatically. This notice clears after the next fully delivered send to the same destination, or when the integration reloads."
+    }
   }
 }

@@ -94,6 +94,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SignalConfigEntry) -> b
         await entry.runtime_data.receipts.stop()
         await entry.runtime_data.assist.stop()
         await entry.runtime_data.stop_alerts()
+        entry.runtime_data.clear_identity_issue()
         task = entry.runtime_data.receiver_task
         if task is not None:
             task.cancel()
