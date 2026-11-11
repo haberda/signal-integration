@@ -22,6 +22,7 @@ from .const import (
     EVENT_MESSAGE,
     EVENT_REACTION,
     MODES,
+    SEND_DEADLINE,
 )
 from .models import IncomingEvent, Reaction
 from .receipts import ReadReceipts
@@ -147,10 +148,27 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
             raise ServiceValidationError("Provide a message or attachment")
         if len(message) > 10000:
             raise ServiceValidationError("Message exceeds 10000 characters")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + SEND_DEADLINE
         # Bound concurrent encoded payloads to one per account.
-        async with self.send_lock:
+        try:
+            async with asyncio.timeout_at(deadline):
+                await self.send_lock.acquire()
+        except TimeoutError:
+            raise ServiceValidationError(
+                "Signal was busy with earlier sends; nothing was sent"
+            ) from None
+        try:
             fields = {"text_mode": text_mode}
-            encoded = await encode_attachments(self.hass, attachments or [], urls or [])
+            try:
+                async with asyncio.timeout_at(deadline):
+                    encoded = await encode_attachments(
+                        self.hass, attachments or [], urls or []
+                    )
+            except TimeoutError:
+                raise ServiceValidationError(
+                    "Attachments were not ready in time; nothing was sent"
+                ) from None
             if encoded:
                 fields["base64_attachments"] = encoded
             if quote_timestamp is not None:
@@ -161,10 +179,20 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
                     fields["quote_message"] = quote_message
             results = []
             for recipient in recipients:
-                try:
-                    result = await self.client.send(
-                        self.account, [recipient], message, **fields
+                if loop.time() >= deadline:
+                    results.append(
+                        {
+                            "recipient": recipient,
+                            "success": False,
+                            "error": "Not attempted; the send time limit was reached",
+                        }
                     )
+                    continue
+                try:
+                    async with asyncio.timeout_at(deadline):
+                        result = await self.client.send(
+                            self.account, [recipient], message, **fields
+                        )
                     if result.get("errors"):
                         results.append(
                             {
@@ -195,7 +223,17 @@ class SignalCoordinator(DataUpdateCoordinator[dict]):
                     results.append(
                         {"recipient": recipient, "success": False, "error": str(err)}
                     )
+                except TimeoutError:
+                    results.append(
+                        {
+                            "recipient": recipient,
+                            "success": False,
+                            "error": "Send time limit reached; this send may already have succeeded",
+                        }
+                    )
             self.async_update_listeners()
+        finally:
+            self.send_lock.release()
         return {"success": all(r["success"] for r in results), "results": results}
 
     async def react(

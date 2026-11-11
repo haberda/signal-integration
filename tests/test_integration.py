@@ -298,3 +298,41 @@ async def test_destination_name_drives_entity_name_and_initial_id(
         == "Signal test Home alerts"
     )
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_send_time_limit(hass, entry, api_mock):
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = entry.runtime_data
+    module = "custom_components.signal_messenger_rest.coordinator"
+
+    async def stall(*_args, **_kwargs):
+        await asyncio.Event().wait()
+
+    with (
+        patch(f"{module}.SEND_DEADLINE", 0.05),
+        patch(
+            "custom_components.signal_messenger_rest.api.SignalClient.send",
+            side_effect=stall,
+        ) as send,
+    ):
+        result = await runtime.send_message(["+12025550101", "group.test"], "test")
+        # The stalled send is uncertain; the next destination is never attempted.
+        assert send.call_count == 1
+        assert not result["success"]
+        assert "may already have succeeded" in result["results"][0]["error"]
+        assert result["results"][1]["error"].startswith("Not attempted")
+        assert not runtime.send_lock.locked()
+
+        async with runtime.send_lock:
+            with pytest.raises(ServiceValidationError, match="nothing was sent"):
+                await runtime.send_message(["+12025550101"], "test")
+        assert send.call_count == 1
+
+        with (
+            patch(f"{module}.encode_attachments", side_effect=stall),
+            pytest.raises(ServiceValidationError, match="nothing was sent"),
+        ):
+            await runtime.send_message(["+12025550101"], "test")
+        assert send.call_count == 1
+        assert not runtime.send_lock.locked()
+    await hass.config_entries.async_unload(entry.entry_id)
