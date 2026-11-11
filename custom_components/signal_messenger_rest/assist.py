@@ -49,6 +49,19 @@ def pipeline_signature(hass, pipeline_id):
     )
 
 
+def _set_agent_only(run):
+    """Set Home Assistant's private agent-only flag where this release keeps it.
+
+    Releases up to 2026.9 keep it on the run; 2026.10 moved it to the run's
+    stage processor. Setting it in the wrong place is silently ignored.
+    """
+    for holder in (getattr(run, "_processor", None), run):
+        if hasattr(holder, "_intent_agent_only"):
+            holder._intent_agent_only = True
+            return True
+    return False
+
+
 async def run_text(hass, pipeline_id, text, conversation_id=None, *, on_route=None):
     """Run only intent processing, using the selected pipeline's agent/language."""
     if "assist_pipeline" not in hass.config.components:
@@ -100,7 +113,11 @@ async def run_text(hass, pipeline_id, text, conversation_id=None, *, on_route=No
         # HA's pipeline can run sentence triggers even with local matching
         # disabled. Use its agent-only path to honor the operator's preference.
         # Covered against the real pipeline, including consecutive LLM turns.
-        run._intent_agent_only = not pipeline.prefer_local_intents
+        if not pipeline.prefer_local_intents and not _set_agent_only(run):
+            # Fail closed: sentence triggers must not answer for the selected agent.
+            if callable(unregister := getattr(run, "_unregister", None)):
+                unregister()
+            raise AssistError("Agent-only routing is unavailable")
         await PipelineInput(run=run, session=session, intent_input=text).execute(
             validate=True
         )

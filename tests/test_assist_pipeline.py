@@ -13,11 +13,17 @@ async def test_pipeline_unavailable(hass):
         await run_text(hass, "missing", "Hello")
 
 
-def test_agent_only_routing_flag_exists():
-    """The bridge sets this private attribute; a rename would silently drop it."""
-    from homeassistant.components.assist_pipeline.pipeline import PipelineRun
+def stage_class():
+    """Return the class implementing pipeline stages in this HA release."""
+    try:
+        from homeassistant.components.assist_pipeline.default_pipeline import (
+            _DefaultPipelineProcessor,
+        )
+    except ImportError:
+        from homeassistant.components.assist_pipeline.pipeline import PipelineRun
 
-    assert PipelineRun._intent_agent_only is False
+        return PipelineRun
+    return _DefaultPipelineProcessor
 
 
 async def test_real_intent_pipeline(hass):
@@ -33,14 +39,8 @@ async def test_real_intent_pipeline(hass):
     pipelines = async_get_pipelines(hass)
     assert pipelines
     with (
-        patch(
-            "homeassistant.components.assist_pipeline.pipeline.PipelineRun.speech_to_text",
-            new_callable=AsyncMock,
-        ) as stt,
-        patch(
-            "homeassistant.components.assist_pipeline.pipeline.PipelineRun.text_to_speech",
-            new_callable=AsyncMock,
-        ) as tts,
+        patch.object(stage_class(), "speech_to_text", new_callable=AsyncMock) as stt,
+        patch.object(stage_class(), "text_to_speech", new_callable=AsyncMock) as tts,
     ):
         reply, session_id = await run_text(
             hass, pipelines[0].id, "A synthetic sentence nobody recognizes"
@@ -143,6 +143,32 @@ async def test_local_disabled_never_intercepts_selected_agent(hass):
             * 3
         )
     assert len(selected.inputs) == 3
+
+
+async def test_missing_agent_only_support_fails_closed(hass):
+    """Never let sentence triggers answer when the routing flag cannot be set."""
+    from homeassistant.components.assist_pipeline.pipeline import async_update_pipeline
+
+    pipeline, agents = await setup_agent_pipeline(hass)
+    selected_id, selected = agents[1]
+    await async_update_pipeline(
+        hass, pipeline, conversation_engine=selected_id, prefer_local_intents=False
+    )
+    with (
+        patch(
+            "homeassistant.components.conversation.async_handle_sentence_triggers",
+            new_callable=AsyncMock,
+            return_value="Local automation response",
+        ) as trigger,
+        patch(
+            "custom_components.signal_messenger_rest.assist._set_agent_only",
+            return_value=False,
+        ),
+        pytest.raises(AssistError),
+    ):
+        await run_text(hass, pipeline.id, "A conversation request")
+    trigger.assert_not_awaited()
+    assert not selected.inputs
 
 
 async def test_switching_pipeline_agent_discards_old_followup(hass, entry, api_mock):

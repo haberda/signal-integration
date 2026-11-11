@@ -9,7 +9,8 @@
 - Keep receiving when a single incoming event cannot be handled; count such events in diagnostics as `dispatch_errors` and log only the error type.
 - Limit one send action to five minutes overall, covering the wait for earlier sends, attachment preparation and all destinations. Destinations not reached are reported as not attempted and an interrupted send as uncertain; nothing is retried.
 - Document that restarts, reloads and option changes cancel pending acknowledgment alerts and the waiting automation run.
-- Test against the latest Home Assistant release in CI, and fail clearly if the pipeline routing attribute used by the Assist bridge disappears.
+- Fix Assist on Home Assistant 2026.10: with local handling disabled, sentence triggers could answer instead of the selected agent because the pipeline's internal routing flag moved. The bridge now sets it in either location and declines the request if it cannot.
+- Test against the latest Home Assistant release in CI as well as the pinned minimum.
 - Add a snapshot-then-video mode to the motion blueprint, retaining snapshot-only and video-only modes.
 - Use the renamed camera blueprint filename in documentation and tests.
 
