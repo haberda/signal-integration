@@ -9,6 +9,8 @@
 - Keep receiving when a single incoming event cannot be handled; count such events in diagnostics as `dispatch_errors` and log only the error type.
 - Limit one send action to five minutes overall, covering the wait for earlier sends, attachment preparation and all destinations. Destinations not reached are reported as not attempted and an interrupted send as uncertain; nothing is retried.
 - Document that restarts, reloads and option changes cancel pending acknowledgment alerts and the waiting automation run.
+- Fix every send being reported as failed with "Send returned no message reference" although the message was delivered. Current signal-cli-rest-api releases answer `v2/send` with a list holding one object per recipient type; the client accepted only a single object. Both shapes are now accepted, and a response without any message reference remains an uncertain failure that is never retried.
+- The optional test message in setup and options no longer fails for a group when only individual members could not be reached.
 - Fix group sends being reported as failed when the message was sent but signal-cli-rest-api 0.101+ reported a failure for individual members. Such sends are now `partial`: they count as successful, update the last successful send, and no longer stop notify entities, Assist replies, or group alerts and their reminders.
 - Add `status` to each send result, `failed_members` with failure types and shortened identifiers for partial sends, and a top-level `partial` flag. Existing response keys are unchanged.
 - Log one content-free warning per send with member-failure counts, include the last send outcome in diagnostics, and raise a repair notice when a contact's safety number changed. Identities are never trusted automatically.

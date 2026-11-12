@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 from urllib.parse import parse_qs, quote, urlsplit
@@ -10,6 +11,8 @@ import aiohttp
 from yarl import URL
 
 from .const import MAX_RESPONSE_BYTES, MODES
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SignalError(Exception):
@@ -30,6 +33,72 @@ class InvalidResponse(SignalError):
 
 class UnsupportedServer(SignalError):
     """The backend does not implement the supported contract."""
+
+
+def normalize_send_response(result: Any) -> dict:
+    """Return one ``{"timestamp", "errors"?}`` dict for a v2 send response.
+
+    signal-cli-rest-api answers with a list holding one object per recipient
+    type (group, numbers, usernames); older builds answered with the object
+    itself. Each object has a ``timestamp`` and, from 0.101, optional
+    ``errors.recipients[]``.
+    """
+    items = result if isinstance(result, list) else [result]
+    if not items or not all(isinstance(item, dict) for item in items):
+        raise InvalidResponse(
+            "Send returned no message reference; delivery is uncertain"
+        )
+    timestamp = next(
+        (
+            item["timestamp"]
+            for item in items
+            if type(item.get("timestamp")) in (str, int) and item["timestamp"]
+        ),
+        None,
+    )
+    if timestamp is None:
+        raise InvalidResponse(
+            "Send returned no message reference; delivery is uncertain"
+        )
+    normalized = {"timestamp": timestamp}
+    reports = [item["errors"] for item in items if item.get("errors")]
+    if reports:
+        if all(
+            isinstance(report, dict) and isinstance(report.get("recipients"), list)
+            for report in reports
+        ):
+            normalized["errors"] = {
+                "recipients": [
+                    member for report in reports for member in report["recipients"]
+                ]
+            }
+        else:
+            # Leave an unknown structure for the caller to treat as unrecognized.
+            normalized["errors"] = next(
+                report
+                for report in reports
+                if not isinstance(report, dict)
+                or not isinstance(report.get("recipients"), list)
+            )
+    return normalized
+
+
+def _response_shape(result: Any) -> str:
+    """Describe a response's structure only: container, count and field names."""
+    items = result if isinstance(result, list) else [result]
+    keys = sorted(
+        {
+            key[:32]
+            for item in items[:8]
+            if isinstance(item, dict)
+            for key in item
+            if isinstance(key, str)
+        }
+    )[:12]
+    return (
+        f"{type(result).__name__} with {len(items)} item(s); "
+        f"fields: {', '.join(keys) or 'none'}"
+    )
 
 
 def normalize_url(value: str) -> str:
@@ -91,6 +160,7 @@ class SignalClient:
         self.ssl = verify_ssl
         self.lock = asyncio.Lock()
         self.mode = "json-rpc"
+        self._send_shape_logged = False
 
     def endpoint(self, path: str) -> str:
         return f"{self.url}/{path.lstrip('/')}"
@@ -243,11 +313,11 @@ class SignalClient:
                     **fields,
                 },
             )
-        if not isinstance(result, dict) or "timestamp" not in result:
-            raise InvalidResponse(
-                "Send returned no message reference; delivery is uncertain"
-            )
-        return result
+        if not self._send_shape_logged:
+            # Structure only, once per client: never values or identifiers.
+            self._send_shape_logged = True
+            _LOGGER.debug("Send response shape: %s", _response_shape(result))
+        return normalize_send_response(result)
 
     async def set_typing(self, account: str, recipient: str, active: bool) -> None:
         """Start/refresh or stop typing in a direct or group conversation."""

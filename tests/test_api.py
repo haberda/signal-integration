@@ -301,3 +301,76 @@ async def test_send_without_reference_or_with_server_error(
         with pytest.raises(SignalError, match=error) as exc:
             await client.send("+12025550100", ["group.test"], "hello")
         assert "private" not in str(exc.value)
+
+
+MEMBER = {"number": "+12025550102", "reason": "IDENTITY_FAILURE"}
+OTHER = {"uuid": "0f6f2a0c-5d0e-4c57-9a5e-3f2b7c1d9e10", "reason": "NETWORK_FAILURE"}
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        # signal-cli-rest-api 0.101, json-rpc mode: one object per recipient type.
+        ([{"timestamp": "1794509432795"}], {"timestamp": "1794509432795"}),
+        ({"timestamp": "1794509432795"}, {"timestamp": "1794509432795"}),
+        (
+            [{"timestamp": "1000", "errors": {"recipients": [MEMBER]}}],
+            {"timestamp": "1000", "errors": {"recipients": [MEMBER]}},
+        ),
+        (
+            [
+                {"errors": {"recipients": [MEMBER]}},
+                {"timestamp": "1000"},
+                {"timestamp": "2000", "errors": {"recipients": [OTHER]}},
+            ],
+            {"timestamp": "1000", "errors": {"recipients": [MEMBER, OTHER]}},
+        ),
+        (
+            [{"timestamp": "1000", "errors": {"unexpected": True}}],
+            {"timestamp": "1000", "errors": {"unexpected": True}},
+        ),
+    ],
+)
+async def test_send_response_shapes(aiohttp_server, caplog, body, expected):
+    async def handler(request):
+        return web.json_response(body, status=201)
+
+    app = web.Application()
+    app.router.add_post("/v2/send", handler)
+    server = await aiohttp_server(app)
+    caplog.set_level("DEBUG")
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        assert await client.send("+12025550100", ["group.test"], "hello") == expected
+        assert await client.send("+12025550100", ["group.test"], "hello") == expected
+    # The shape is described once, by structure only.
+    assert caplog.text.count("Send response shape") == 1
+    assert "fields: " in caplog.text and "timestamp" in caplog.text
+    for private in ("1794509432795", "+1202555", "0f6f2a0c", "group.test", "hello"):
+        assert private not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        [{}],
+        ["x"],
+        [{"timestamp": "1000"}, "x"],
+        [{"errors": {"recipients": [MEMBER]}}],
+        [{"timestamp": ""}],
+        [{"timestamp": None}],
+        "1000",
+    ],
+)
+async def test_send_response_without_reference(aiohttp_server, body):
+    async def handler(request):
+        return web.json_response(body, status=201)
+
+    app = web.Application()
+    app.router.add_post("/v2/send", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        with pytest.raises(InvalidResponse, match="delivery is uncertain"):
+            await client.send("+12025550100", ["group.test"], "hello")

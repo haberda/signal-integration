@@ -45,6 +45,7 @@ from .const import (
 from .device_flow import DeviceFlowMixin
 from .group_flow import GroupFlowMixin
 from .link_flow import LinkFlowMixin
+from .outcomes import failed_members
 
 
 def connection_schema(defaults: dict) -> vol.Schema:
@@ -83,7 +84,9 @@ async def test_destination(client: SignalClient, account: str, recipient: str) -
     result = await client.send(
         account, [recipient], "Home Assistant Signal integration test."
     )
-    if result.get("errors"):
+    members = failed_members(result)
+    # A group test is delivered even when individual members fail.
+    if members is None or (members and not recipient.startswith("group.")):
         raise SignalError("Test send failed")
 
 

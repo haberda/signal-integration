@@ -1,6 +1,6 @@
 """Configuration, options, duplicate prevention and reconnection."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from homeassistant.data_entry_flow import FlowResultType
@@ -230,6 +230,37 @@ async def test_optional_setup_test_message(hass, api_mock):
         )
         assert "test_recipient" not in result["options"]
         await hass.async_block_till_done()
+
+
+@pytest.mark.parametrize(
+    ("recipient", "body", "accepted"),
+    [
+        ("group.test", [{"timestamp": "1794509432795"}], True),
+        (
+            "group.test",
+            [{"timestamp": "1", "errors": {"recipients": [{"reason": "X"}]}}],
+            True,
+        ),
+        (
+            "+12025550101",
+            [{"timestamp": "1", "errors": {"recipients": [{"reason": "X"}]}}],
+            False,
+        ),
+        ("group.test", [{"timestamp": "1", "errors": {"unexpected": True}}], False),
+        ("group.test", [], False),
+    ],
+)
+async def test_destination_test_accepts_list_response(recipient, body, accepted):
+    from custom_components.signal_messenger_rest.api import SignalClient, SignalError
+    from custom_components.signal_messenger_rest.config_flow import test_destination
+
+    client = SignalClient(Mock(), "http://signal.invalid")
+    with patch.object(client, "request", AsyncMock(return_value=body)):
+        if accepted:
+            await test_destination(client, "+12025550100", recipient)
+        else:
+            with pytest.raises(SignalError):
+                await test_destination(client, "+12025550100", recipient)
 
 
 async def test_failed_options_test_does_not_save_or_repeat(hass, entry, api_mock):

@@ -507,3 +507,69 @@ async def test_group_alert_uses_partial_send_reference(hass, entry, api_mock):
         assert send.await_count > 1
         assert send.await_args.kwargs["quote_timestamp"] == 1000
         await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(
+    ("body", "group_status", "direct_status"),
+    [
+        ([{"timestamp": "1794509432795"}], "sent", "sent"),
+        ([MEMBER_FAILED], "partial", "failed"),
+    ],
+)
+async def test_list_shaped_backend_response(
+    hass, entry, api_mock, body, group_status, direct_status
+):
+    """Run the real client parsing; only the HTTP request is replaced."""
+    from custom_components.signal_messenger_rest.alerts import send_alert
+
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "receive": True}
+    )
+
+    async def messages(_self, _account):
+        yield {"_connected": True}
+        await asyncio.Event().wait()
+
+    with (
+        patch(
+            "custom_components.signal_messenger_rest.api.SignalClient.messages",
+            messages,
+        ),
+        patch(
+            "custom_components.signal_messenger_rest.api.SignalClient.request",
+            new_callable=AsyncMock,
+            return_value=body,
+        ) as request,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        runtime = entry.runtime_data
+        request.reset_mock()
+        response = await hass.services.async_call(
+            DOMAIN,
+            "send_message",
+            {"recipients": ["group.test"], "message": "test"},
+            blocking=True,
+            return_response=True,
+        )
+        assert response["success"]
+        assert response["results"][0]["status"] == group_status
+        assert response["results"][0]["timestamp"] == body[0]["timestamp"]
+        assert runtime.last_sent is not None
+        state = hass.states.get("sensor.signal_test_last_successful_send")
+        assert state.state not in ("unknown", "unavailable")
+
+        direct = await runtime.send_message(["+12025550101"], "test")
+        assert direct["results"][0]["status"] == direct_status
+
+        alert = await send_alert(
+            runtime,
+            recipient="group.test",
+            message="Alert",
+            expiry=1,
+            reminder_interval=0.2,
+        )
+        assert alert["timestamp"] == body[0]["timestamp"]
+        assert request.await_args.kwargs["data"]["quote_timestamp"] == int(
+            body[0]["timestamp"]
+        )
+        await hass.config_entries.async_unload(entry.entry_id)

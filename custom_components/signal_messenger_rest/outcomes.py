@@ -1,9 +1,9 @@
 """Classify v2 send responses without retaining recipient identities.
 
-signal-cli-rest-api 0.101 and later answer HTTP 201 with the message
-``timestamp`` and, when signal-cli reported a non-success result for any
-recipient, ``errors.recipients[]`` holding ``number``/``uuid``/``username``
-and signal-cli's result type as ``reason``. For a group this lists individual
+The client reduces a send response to one dict. signal-cli-rest-api 0.101
+and later include the message ``timestamp`` and, when signal-cli reported a
+non-success result for any recipient, ``errors.recipients[]`` holding
+``number``/``uuid``/``username`` and signal-cli's result type as ``reason``. For a group this lists individual
 members, so the message was still sent to the others.
 """
 
