@@ -281,7 +281,17 @@ async def test_failed_options_test_does_not_save_or_repeat(hass, entry, api_mock
         marker = next(
             key for key in result["data_schema"].schema if str(key) == "test_recipient"
         )
-        assert marker.default() == ""
+        assert marker.default() == "no_test"
+        # The explicit opt-out, an empty value and an omitted field send nothing.
+        for test in ({"test_recipient": "no_test"}, {"test_recipient": ""}):
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {**SETTINGS, **test}
+            )
+            assert result["type"] == FlowResultType.CREATE_ENTRY
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {"next_step_id": "settings"}
+            )
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], SETTINGS
         )

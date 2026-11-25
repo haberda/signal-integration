@@ -80,6 +80,16 @@ def permission_selector(choices: dict[str, str], *, groups: bool) -> SelectSelec
     )
 
 
+# Empty select values render as "nothing selected", so the opt-out needs a value.
+NO_TEST = "no_test"
+
+
+def chosen_test_recipient(user_input: dict) -> str:
+    """Return the chosen test destination, or an empty string for none."""
+    recipient = user_input.get("test_recipient", "").strip()
+    return "" if recipient == NO_TEST else recipient
+
+
 async def test_destination(client: SignalClient, account: str, recipient: str) -> None:
     result = await client.send(
         account, [recipient], "Home Assistant Signal integration test."
@@ -117,9 +127,9 @@ def options_schema(choices: dict[str, str], defaults: dict) -> vol.Schema:
             vol.Required(
                 CONF_GROUPS, default=defaults.get(CONF_GROUPS, [])
             ): permission_selector(choices, groups=True),
-            vol.Optional("test_recipient", default=""): SelectSelector(
+            vol.Optional("test_recipient", default=NO_TEST): SelectSelector(
                 SelectSelectorConfig(
-                    options=[{"value": "", "label": "Do not send a test message"}]
+                    options=[{"value": NO_TEST, "label": "Do not send a test message"}]
                     + [
                         {"value": key, "label": label} for key, label in choices.items()
                     ],
@@ -353,7 +363,7 @@ class SignalConfigFlow(DestinationNamesMixin, LinkFlowMixin, ConfigFlow, domain=
         if user_input is not None:
             try:
                 options = make_options(user_input, self._choices)
-                if recipient := user_input.get("test_recipient", "").strip():
+                if recipient := chosen_test_recipient(user_input):
                     await test_destination(
                         self._client, self._data[CONF_ACCOUNT], recipient
                     )
@@ -484,7 +494,7 @@ class SignalOptionsFlow(
                 options = make_options(
                     user_input, self._choices, dict(self.config_entry.options)
                 )
-                if recipient := user_input.get("test_recipient", "").strip():
+                if recipient := chosen_test_recipient(user_input):
                     entry = self.config_entry
                     runtime = getattr(entry, "runtime_data", None)
                     client = (
