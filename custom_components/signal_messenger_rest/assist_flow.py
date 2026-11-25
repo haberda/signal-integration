@@ -124,6 +124,10 @@ class AssistFlowMixin:
                     vol.Required(
                         "prefix", default=settings.get("prefix", "/assist")
                     ): TextSelector(),
+                    vol.Optional(
+                        "leave_slash_commands",
+                        default=settings.get("leave_slash_commands", False),
+                    ): BooleanSelector(),
                     vol.Required(
                         "conversation_timeout",
                         default=settings.get("conversation_timeout", 300),
@@ -166,9 +170,11 @@ class AssistFlowMixin:
                 "agent": agent_label,
                 "local": local,
                 "activation": (
-                    "All direct text messages"
-                    if settings.get("direct_mode") == "all"
-                    else "Require the command prefix"
+                    "Require the command prefix"
+                    if settings.get("direct_mode") != "all"
+                    else "All direct text messages, except slash commands"
+                    if settings.get("leave_slash_commands")
+                    else "All direct text messages"
                 ),
                 "prefix": settings.get("prefix", "/assist"),
                 "api": str(bool(runtime and runtime.last_update_success)),

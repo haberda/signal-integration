@@ -266,11 +266,13 @@
           "conversation_timeout": "Conversation idle timeout",
           "publish_events": "Also publish handled messages as events",
           "typing_indicator": "Show typing while Assist responds",
-          "quote_context": "Include quoted text as Assist context"
+          "quote_context": "Include quoted text as Assist context",
+          "leave_slash_commands": "Leave slash commands to automations"
         },
         "data_description": {
           "typing_indicator": "Attempt to show a typing indicator in the conversation while Assist processes a request and sends its reply.",
-          "quote_context": "Send up to 2,000 characters of the quoted message to the selected Assist agent, including its cloud provider if configured. Your new message still requires normal Assist authorization and activation."
+          "quote_context": "Send up to 2,000 characters of the quoted message to the selected Assist agent, including its cloud provider if configured. Your new message still requires normal Assist authorization and activation.",
+          "leave_slash_commands": "In all-direct-messages mode, do not answer direct messages that start with “/”, such as /status, so message automations can handle them. The Assist prefix and /reset still go to Assist. Those messages fire message events only for senders allowed under Destinations and receiving."
         }
       },
       "destination_name": {

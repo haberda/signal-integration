@@ -199,6 +199,14 @@ class SignalAssist:
         ):
             if not prefixed:
                 return False
+        elif (
+            self.settings.get("leave_slash_commands", False)
+            and not prefixed
+            and text.startswith("/")
+            and text != "/reset"
+        ):
+            # Leave unprefixed commands such as /status to message automations.
+            return False
         if prefixed:
             text = text[len(prefix) :].strip()
         if message.dedup_key in self.seen:

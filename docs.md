@@ -76,6 +76,7 @@ Optional settings:
 
 | Setting | Use |
 | --- | --- |
+| Leave slash commands to automations | In all-direct-messages mode, leaves direct messages starting with `/` (for example `/status`) to message automations. The Assist prefix and `/reset` still reach Assist; event permissions still apply |
 | Show typing while Assist responds | Displays best-effort progress in Signal |
 | Include quoted text as Assist context | Sends up to 2,000 characters of quoted text to the selected agent/provider, including a cloud provider if configured |
 | Also publish handled messages as events | Allows message automations to also handle Assist requests; leave off to avoid duplicate responses |
@@ -102,7 +103,7 @@ Authorized incoming messages emit `signal_messenger_rest_message_received`. Key 
 
 Incoming attachment files are not downloaded by this integration. Sync echoes and typing/receipt events do not trigger message automations.
 
-For exact-command replies alongside Assist, use prefix-based Assist activation and a separate command such as `/status`. In all-direct-messages mode, Assist normally consumes the command before an event is published; enabling event publishing can produce two replies. The reply blueprint needs event permissions, not just Assist permissions.
+For exact-command replies alongside Assist, use prefix-based Assist activation and a separate command such as `/status`, or all-direct-messages mode with **Leave slash commands to automations** enabled. Otherwise, in all-direct-messages mode Assist consumes the command before an event is published, and enabling event publishing can produce two replies. The reply blueprint needs event permissions, not just Assist permissions.
 
 Import the [reply blueprint](blueprints/automation/signal_messenger_rest/reply.yaml) to respond to an exact command, or write an automation:
 

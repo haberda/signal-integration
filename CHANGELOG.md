@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add an opt-in Assist setting, **Leave slash commands to automations**: in all-direct-messages mode, direct messages starting with `/` go to message automations instead of Assist, except the Assist prefix and `/reset`. Event permissions still apply. The troubleshooting screen shows the setting as part of the activation mode.
 - Accept the account list format from signal-cli-rest-api 0.102, which returns account objects instead of phone numbers. Numberless accounts are identified by their ACI.
 - Recheck camera blockers before captures and sends; preserve cooldown after runtime failures and let video proceed after a failed snapshot.
 - Preserve phone-number quote authors in command replies.

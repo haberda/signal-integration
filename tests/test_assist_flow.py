@@ -77,6 +77,7 @@ async def test_save_assist_and_other_options_preserve_each_other(
         **ASSIST,
         "typing_indicator": typing,
         "quote_context": False,
+        "leave_slash_commands": False,
     }
 
 

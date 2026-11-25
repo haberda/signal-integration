@@ -4,8 +4,9 @@ blueprint:
     Match an exact incoming command and reply in the same conversation.
     Enable receiving and configure event sender/group permissions first;
     Assist permissions alone do not enable this blueprint. Use Assist's prefix
-    activation with a separate command such as /status. If Assist handles all
-    direct messages, it normally consumes these commands; publishing handled
+    activation with a separate command such as /status, or enable Assist's
+    "Leave slash commands to automations" option. Otherwise, if Assist handles
+    all direct messages, it consumes these commands; publishing handled
     messages as events can cause both Assist and this automation to reply.
     The response template can read Home Assistant states. Incoming message text
     is never evaluated as a template or service name.

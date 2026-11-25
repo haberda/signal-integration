@@ -257,6 +257,62 @@ async def test_all_direct_messages_and_reset(runtime):
         assert not runtime.assist.sessions
 
 
+async def test_slash_commands_left_to_automations(runtime, hass):
+    events = []
+    hass.bus.async_listen(EVENT_MESSAGE, events.append)
+    group = replace(
+        MESSAGE, conversation_id="group.test", conversation_kind="group", text="hi"
+    )
+    with (
+        patch.object(hass.config_entries, "async_reload", new_callable=AsyncMock),
+        patch(TARGET, new_callable=AsyncMock, return_value=("ok", "s1")) as run,
+    ):
+        # Event permissions for the sender; the entry reload is suppressed above.
+        hass.config_entries.async_update_entry(
+            runtime.entry,
+            options={**runtime.entry.options, "allowed_senders": ["alice"]},
+        )
+        runtime.assist.settings = {
+            **ASSIST,
+            "direct_mode": "all",
+            "leave_slash_commands": True,
+        }
+        for timestamp, text in enumerate(
+            [
+                "/status",
+                "/snap front door",
+                "/",
+                "turn on the light",
+                "/assist dim the light",
+                "/reset",
+            ],
+            start=2000,
+        ):
+            runtime.receive_message(replace(MESSAGE, timestamp=timestamp, text=text))
+        # Groups still need the prefix; the option does not change them.
+        assert not runtime.assist.handle(replace(group, text="/status"))
+        await drain(runtime)
+        await hass.async_block_till_done()
+        assert [call.args[2] for call in run.await_args_list] == [
+            "turn on the light",
+            "dim the light",
+        ]
+        assert [event.data["text"] for event in events] == [
+            "/status",
+            "/snap front door",
+            "/",
+        ]
+        # Off by default: Assist still claims slash commands in all mode.
+        runtime.assist.settings = {**ASSIST, "direct_mode": "all"}
+        assert runtime.assist.handle(replace(MESSAGE, timestamp=3000, text="/status"))
+        # Prefix mode is unaffected by the option.
+        runtime.assist.settings = {**ASSIST, "leave_slash_commands": True}
+        assert not runtime.assist.handle(
+            replace(MESSAGE, timestamp=3001, text="turn on the light")
+        )
+        await drain(runtime)
+
+
 async def test_oversized_and_stale_requests_are_not_executed(runtime):
     gate = asyncio.Event()
 
