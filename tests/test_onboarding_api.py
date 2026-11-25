@@ -69,10 +69,40 @@ async def test_account_device_contract(aiohttp_server):
 
 
 @pytest.mark.parametrize(
+    "response",
+    [
+        # signal-cli-rest-api 0.102 account objects, including a numberless account.
+        [
+            {"number": "+123", "aci": "11111111-1111-4111-8111-111111111111"},
+            {"number": "", "aci": "22222222-2222-4222-8222-222222222222"},
+            {"number": "+123", "aci": "11111111-1111-4111-8111-111111111111"},
+        ],
+        ["+123", "22222222-2222-4222-8222-222222222222"],
+    ],
+)
+async def test_account_list_formats(aiohttp_server, response):
+    async def handler(request):
+        return web.json_response(response)
+
+    app = web.Application()
+    app.router.add_route("*", "/{tail:.*}", handler)
+    server = await aiohttp_server(app)
+    async with aiohttp.ClientSession() as session:
+        client = SignalClient(session, str(server.make_url("/")))
+        assert await client.accounts() == [
+            "+123",
+            "22222222-2222-4222-8222-222222222222",
+        ]
+
+
+@pytest.mark.parametrize(
     ("method", "response"),
     [
         ("accounts", {}),
         ("accounts", [None]),
+        ("accounts", [{"number": "", "aci": None}]),
+        ("accounts", [{"number": 123}]),
+        ("accounts", [["+123"]]),
         ("start_link", {"device_link_uri": "https://example.com/secret"}),
         ("start_link", None),
         ("devices", [{"id": True}]),

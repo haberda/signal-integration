@@ -217,12 +217,22 @@ class SignalClient:
         return about, accounts
 
     async def accounts(self) -> list[str]:
-        """List backend accounts without starting a linking operation."""
-        accounts = await self.request("GET", "v1/accounts", request_timeout=30)
-        if not isinstance(accounts, list) or not all(
-            isinstance(a, str) and a for a in accounts
-        ):
+        """List backend accounts without starting a linking operation.
+
+        signal-cli-rest-api 0.102+ returns ``{"number": ..., "aci": ...}``
+        objects instead of strings; ``number`` is empty for numberless
+        accounts, whose ACI is then the identifier other endpoints accept.
+        """
+        raw = await self.request("GET", "v1/accounts", request_timeout=30)
+        if not isinstance(raw, list):
             raise InvalidResponse("Invalid account list")
+        accounts = []
+        for item in raw:
+            if isinstance(item, dict):
+                item = item.get("number") or item.get("aci")
+            if not isinstance(item, str) or not item:
+                raise InvalidResponse("Invalid account list")
+            accounts.append(item)
         return list(dict.fromkeys(accounts))
 
     async def start_link(self, device_name: str) -> str:

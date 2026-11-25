@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Accept the account list format from signal-cli-rest-api 0.102, which returns account objects instead of phone numbers. Numberless accounts are identified by their ACI.
 - Recheck camera blockers before captures and sends; preserve cooldown after runtime failures and let video proceed after a failed snapshot.
 - Preserve phone-number quote authors in command replies.
 - Clarify Assist/event permissions, alert unavailable-state behavior and camera blueprint migration.
