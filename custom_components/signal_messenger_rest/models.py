@@ -156,14 +156,16 @@ def normalize_message(raw: Any, account: str) -> Message | None:
     safe_attachments = []
     for attachment in attachments[:20]:
         if isinstance(attachment, dict):
-            safe_attachments.append(
-                {
-                    k: v
-                    for k, v in attachment.items()
-                    if k in {"id", "contentType", "filename", "size", "width", "height"}
-                    and isinstance(v, (str, int))
-                }
-            )
+            safe = {
+                k: v
+                for k, v in attachment.items()
+                if k in {"id", "contentType", "filename", "size", "width", "height"}
+                and isinstance(v, (str, int))
+            }
+            # signal-cli 0.14.8+ marks recorded voice messages.
+            if isinstance(attachment.get("isVoiceNote"), bool):
+                safe["voice_note"] = attachment["isVoiceNote"]
+            safe_attachments.append(safe)
     quoted = data.get("quote")
     safe_quote = None
     if isinstance(quoted, dict):

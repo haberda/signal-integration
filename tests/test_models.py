@@ -36,6 +36,35 @@ def test_identity_permissions_and_group_conversion():
     assert not msg.allowed([], [msg.conversation_id])
 
 
+def test_attachment_metadata_and_voice_note_flag():
+    raw = deepcopy(RAW)
+    raw["envelope"]["dataMessage"]["attachments"] = [
+        {
+            "id": "voice-id",
+            "contentType": "audio/aac",
+            "size": 4096,
+            "caption": "private caption",
+            "isVoiceNote": True,
+        },
+        {"id": "photo-id", "contentType": "image/jpeg", "isVoiceNote": False},
+        # Older signal-cli omits the flag; a non-boolean value is not passed on.
+        {"id": "old-id", "contentType": "audio/aac"},
+        {"id": "odd-id", "contentType": "audio/aac", "isVoiceNote": "yes"},
+    ]
+    msg = normalize_message(raw, "+12025550100")
+    assert msg.attachments == [
+        {
+            "id": "voice-id",
+            "contentType": "audio/aac",
+            "size": 4096,
+            "voice_note": True,
+        },
+        {"id": "photo-id", "contentType": "image/jpeg", "voice_note": False},
+        {"id": "old-id", "contentType": "audio/aac"},
+        {"id": "odd-id", "contentType": "audio/aac"},
+    ]
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

@@ -101,7 +101,7 @@ Authorized incoming messages emit `signal_messenger_rest_message_received`. Key 
 | `timestamp`, `received_at` | Original milliseconds and HA receipt time |
 | `text`, `attachments`, `quote` | Message text and attachment/quote metadata |
 
-Incoming attachment files are not downloaded by this integration. Sync echoes and typing/receipt events do not trigger message automations.
+Each attachment entry has metadata only: `id`, `contentType`, `filename`, `size`, `width` and `height` when known, and `voice_note` (true for a recorded voice message) with signal-cli 0.14.8 or later. Incoming attachment files are not downloaded by this integration, and Assist does not handle voice messages. Sync echoes and typing/receipt events do not trigger message automations.
 
 For exact-command replies alongside Assist, use prefix-based Assist activation and a separate command such as `/status`, or all-direct-messages mode with **Leave slash commands to automations** enabled. Otherwise, in all-direct-messages mode Assist consumes the command before an event is published, and enabling event publishing can produce two replies. The reply blueprint needs event permissions, not just Assist permissions.
 
