@@ -2,26 +2,28 @@
 
 ## Unreleased
 
-- Add `voice_note` to incoming message event attachments when the backend reports it (signal-cli 0.14.8+), so automations can tell recorded voice messages from other audio.
-- Add an opt-in Assist setting, **Leave slash commands to automations**: in all-direct-messages mode, direct messages starting with `/` go to message automations instead of Assist, except the Assist prefix and `/reset`. Event permissions still apply. The troubleshooting screen shows the setting as part of the activation mode.
-- Accept the account list format from signal-cli-rest-api 0.102, which returns account objects instead of phone numbers. Numberless accounts are identified by their ACI.
-- Recheck camera blockers before captures and sends; preserve cooldown after runtime failures and let video proceed after a failed snapshot.
-- Preserve phone-number quote authors in command replies.
-- Clarify Assist/event permissions, alert unavailable-state behavior and camera blueprint migration.
-- Exercise blueprint triggers, failure paths, blocking changes and acknowledgment cancellation with Home Assistant automation tests.
-- Keep receiving when a single incoming event cannot be handled; count such events in diagnostics as `dispatch_errors` and log only the error type.
-- Limit one send action to five minutes overall, covering the wait for earlier sends, attachment preparation and all destinations. Destinations not reached are reported as not attempted and an interrupted send as uncertain; nothing is retried.
-- Document that restarts, reloads and option changes cancel pending acknowledgment alerts and the waiting automation run.
+## 0.6.2
+
 - Fix every send being reported as failed with "Send returned no message reference" although the message was delivered. Current signal-cli-rest-api releases answer `v2/send` with a list holding one object per recipient type; the client accepted only a single object. Both shapes are now accepted, and a response without any message reference remains an uncertain failure that is never retried.
+- Fix group sends being reported as failed when the message was sent but signal-cli-rest-api 0.101+ reported a failure for individual members. Such sends are now `partial`: they count as successful, update the last successful send, and no longer stop notify entities, Assist replies, or group alerts and their reminders.
+- Accept the account list format from signal-cli-rest-api 0.102, which returns account objects instead of phone numbers. Numberless accounts are identified by their ACI.
+- Fix Assist on Home Assistant 2026.10: with local handling disabled, sentence triggers could answer instead of the selected agent because the pipeline's internal routing flag moved. The bridge now sets it in either location and declines the request if it cannot.
 - The optional test message in setup and options no longer fails for a group when only individual members could not be reached.
 - Make **Do not send a test message** selectable in setup and options; it previously had an empty value, which the selector shows as no selection.
-- Fix group sends being reported as failed when the message was sent but signal-cli-rest-api 0.101+ reported a failure for individual members. Such sends are now `partial`: they count as successful, update the last successful send, and no longer stop notify entities, Assist replies, or group alerts and their reminders.
+- Keep receiving when a single incoming event cannot be handled; count such events in diagnostics as `dispatch_errors` and log only the error type.
+- Recheck camera blockers before captures and sends; preserve cooldown after runtime failures and let video proceed after a failed snapshot.
+- Preserve phone-number quote authors in command replies.
 - Add `status` to each send result, `failed_members` with failure types and shortened identifiers for partial sends, and a top-level `partial` flag. Existing response keys are unchanged.
 - Log one content-free warning per send with member-failure counts, include the last send outcome in diagnostics, and raise a repair notice when a contact's safety number changed. Identities are never trusted automatically.
-- Fix Assist on Home Assistant 2026.10: with local handling disabled, sentence triggers could answer instead of the selected agent because the pipeline's internal routing flag moved. The bridge now sets it in either location and declines the request if it cannot.
-- Test against the latest Home Assistant release in CI as well as the pinned minimum.
+- Add an opt-in Assist setting, **Leave slash commands to automations**: in all-direct-messages mode, direct messages starting with `/` go to message automations instead of Assist, except the Assist prefix and `/reset`. Event permissions still apply. The troubleshooting screen shows the setting as part of the activation mode.
+- Add `voice_note` to incoming message event attachments when the backend reports it (signal-cli 0.14.8+), so automations can tell recorded voice messages from other audio.
 - Add a snapshot-then-video mode to the motion blueprint, retaining snapshot-only and video-only modes.
+- Limit one send action to five minutes overall, covering the wait for earlier sends, attachment preparation and all destinations. Destinations not reached are reported as not attempted and an interrupted send as uncertain; nothing is retried.
+- Document that restarts, reloads and option changes cancel pending acknowledgment alerts and the waiting automation run.
+- Clarify Assist/event permissions, alert unavailable-state behavior and camera blueprint migration.
 - Use the renamed camera blueprint filename in documentation and tests.
+- Exercise blueprint triggers, failure paths, blocking changes and acknowledgment cancellation with Home Assistant automation tests.
+- Test against the latest Home Assistant release in CI as well as the pinned minimum.
 
 ## 0.6.1
 
